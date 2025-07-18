@@ -1,6 +1,6 @@
 {
   "name": "quantstats-js",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Portfolio analytics for quantitative trading - Node.js implementation",
   "main": "index.js",
   "type": "module",

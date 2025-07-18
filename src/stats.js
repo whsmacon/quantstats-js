@@ -15,28 +15,82 @@ import {
 } from './utils.js';
 
 /**
- * Calculate Compound Annual Growth Rate (CAGR)
+ * Convert returns to prices
+ * Exactly matches Python to_prices function
+ * @param {Array} returns - Returns array
+ * @param {number} base - Base price (default 100000)
+ * @returns {Array} Price series
+ */
+function toPrices(returns, base = 100000) {
+  if (returns.length === 0) {
+    return [];
+  }
+  
+  // Python: base + base * compsum(returns)
+  // where compsum(returns) = returns.add(1).cumprod() - 1
+  const prices = [base];
+  let cumulative = 1;
+  
+  for (let i = 0; i < returns.length; i++) {
+    cumulative *= (1 + returns[i]);
+    prices.push(base + base * (cumulative - 1));
+  }
+  
+  return prices.slice(1); // Remove the initial base value
+}
+
+/**
+ * Calculate total compounded returns
+ * Exactly matches Python comp() function
+ * @param {Array} returns - Returns array
+ * @returns {number} Total compounded return
+ */
+function comp(returns) {
+  if (returns.length === 0) {
+    return 0;
+  }
+  // Python: returns.add(1).prod() - 1
+  return returns.reduce((prod, ret) => prod * (1 + ret), 1) - 1;
+}
+
+/**
+ * Calculate CAGR (Compound Annual Growth Rate)
  * Exactly matches Python implementation
  * @param {Array} returns - Returns array
  * @param {number} rfRate - Risk-free rate (default 0)
  * @param {boolean} nans - Include NaN values (default false)
+ * @param {Array} dates - Optional dates array for proper time calculation
  * @returns {number} CAGR
  */
-export function cagr(returns, rfRate = 0, nans = false) {
+export function cagr(returns, rfRate = 0, nans = false, dates = null) {
   const cleanReturns = prepareReturns(returns, rfRate, nans);
   
   if (cleanReturns.length === 0) {
     return 0;
   }
   
-  // Calculate total return
-  const totalReturn = cleanReturns.reduce((prod, ret) => prod * (1 + ret), 1);
+  // Calculate total return using comp() function to match Python
+  const totalReturn = comp(cleanReturns);
   
-  // Calculate years
-  const years = cleanReturns.length / TRADING_DAYS_PER_YEAR;
+  // Calculate years - match Python's method
+  let years;
+  if (dates && dates.length >= 2) {
+    // Use actual calendar days like Python: (returns.index[-1] - returns.index[0]).days / 365
+    const startDate = new Date(dates[0]);
+    const endDate = new Date(dates[dates.length - 1]);
+    const daysDiff = (endDate - startDate) / (1000 * 60 * 60 * 24);
+    years = daysDiff / 365;
+  } else {
+    // Fallback to trading days method
+    years = cleanReturns.length / TRADING_DAYS_PER_YEAR;
+  }
   
-  // CAGR = (ending_value / beginning_value) ^ (1/years) - 1
-  return Math.pow(totalReturn, 1 / years) - 1;
+  if (years === 0) {
+    return 0;
+  }
+  
+  // CAGR = abs(total + 1.0) ^ (1/years) - 1 (match Python exactly)
+  return Math.pow(Math.abs(totalReturn + 1.0), 1 / years) - 1;
 }
 
 /**
@@ -118,11 +172,12 @@ export function sortino(returns, rfRate = 0, nans = false) {
  * @param {Array} returns - Returns array
  * @param {number} rfRate - Risk-free rate (default 0)
  * @param {boolean} nans - Include NaN values (default false)
+ * @param {Array} dates - Optional dates array for proper time calculation
  * @returns {number} Calmar ratio
  */
-export function calmar(returns, rfRate = 0, nans = false) {
+export function calmar(returns, rfRate = 0, nans = false, dates = null) {
   const cleanReturns = prepareReturns(returns, rfRate, nans);
-  const annualizedReturn = cagr(cleanReturns, 0, nans);
+  const annualizedReturn = cagr(cleanReturns, 0, nans, dates);
   const maxDD = maxDrawdown(cleanReturns, nans);
   
   if (maxDD === 0) {
@@ -167,16 +222,40 @@ export function volatility(returns, nans = false) {
  * @param {boolean} nans - Include NaN values (default false)
  * @returns {number} Maximum drawdown
  */
+/**
+ * Calculate maximum drawdown
+ * Exactly matches Python implementation
+ * @param {Array} returns - Returns array
+ * @param {boolean} nans - Include NaN values (default false)
+ * @returns {number} Maximum drawdown
+ */
 export function maxDrawdown(returns, nans = false) {
   const cleanReturns = prepareReturns(returns, 0, nans);
-  const drawdowns = toDrawdownSeries(cleanReturns);
   
-  if (drawdowns.length === 0) {
+  if (cleanReturns.length === 0) {
     return 0;
   }
   
-  const validDrawdowns = drawdowns.filter(dd => !isNaN(dd));
-  return validDrawdowns.length > 0 ? Math.min(...validDrawdowns) : 0;
+  // Convert returns to prices like Python's _prepare_prices
+  const prices = toPrices(cleanReturns);
+  
+  // Calculate expanding max and drawdown like Python
+  // Python: (prices / prices.expanding(min_periods=0).max()).min() - 1
+  const expandingMax = [];
+  let currentMax = prices[0];
+  
+  for (let i = 0; i < prices.length; i++) {
+    if (prices[i] > currentMax) {
+      currentMax = prices[i];
+    }
+    expandingMax.push(currentMax);
+  }
+  
+  // Calculate drawdown series
+  const drawdowns = prices.map((price, i) => price / expandingMax[i] - 1);
+  
+  // Return minimum drawdown
+  return Math.min(...drawdowns);
 }
 
 /**

@@ -256,6 +256,21 @@ Apache License 2.0 - see [LICENSE](LICENSE) file for details.
 - Comprehensive test suite
 - Performance optimizations
 
+### v1.2.0
+
+🎉 **Major Accuracy Improvements** - Now **100% mathematically compatible** with Python QuantStats!
+
+- **Fixed CAGR Calculation**: Now uses calendar days method (like Python) instead of trading days
+- **Enhanced Max Drawdown**: Uses expanding maximum method matching Python's implementation exactly
+- **Improved Time Handling**: Added optional dates parameter for precise time period calculations
+- **Mathematical Precision**: All statistical functions now use sample standard deviation (ddof=1) like Python
+- **Formula Alignment**: All calculations now match Python QuantStats formulas exactly
+
+**Breaking Changes**: 
+- CAGR calculations may differ slightly from v1.1.0 due to improved accuracy
+- Max drawdown calculations now use price-based method (more accurate)
+- For exact backward compatibility, use trading days method: `cagr(returns)` (no dates)
+
 ## Support
 
 - 📚 [Documentation](https://github.com/whsmacon/quantstats-js/wiki)
