@@ -304,12 +304,12 @@ describe('Mathematical Validation', () => {
     const compoundRet = qs.stats.compoundReturn(returns);
     assert.equal(Math.abs(totalRet - compoundRet) < 1e-15, true);
     
-    // Sharpe ratio should be mean/std * sqrt(252)
+    // Sharpe ratio should be (mean/std) * sqrt(252) with sample std
     const cleanReturns = qs.utils.prepareReturns(returns);
     const mean = cleanReturns.reduce((sum, ret) => sum + ret, 0) / cleanReturns.length;
-    const variance = cleanReturns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / cleanReturns.length;
+    const variance = cleanReturns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / (cleanReturns.length - 1);
     const std = Math.sqrt(variance);
-    const expectedSharpe = std === 0 ? 0 : (mean * Math.sqrt(252)) / (std * Math.sqrt(252));
+    const expectedSharpe = std === 0 ? 0 : (mean / std) * Math.sqrt(252);
     const calculatedSharpe = qs.stats.sharpe(returns);
     
     assert.equal(Math.abs(calculatedSharpe - expectedSharpe) < 1e-10, true);

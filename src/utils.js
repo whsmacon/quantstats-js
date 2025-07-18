@@ -27,13 +27,27 @@ export function prepareReturns(data, rfRate = 0, nans = false) {
   let returns = [...data];
   
   // If data looks like prices (always positive, large values), convert to returns
-  if (returns.length > 1 && returns.every(val => val > 0) && Math.min(...returns) > 1) {
+  const validValues = returns.filter(val => 
+    val !== null && 
+    val !== undefined && 
+    !isNaN(val) && 
+    isFinite(val) && 
+    typeof val === 'number'
+  );
+  
+  if (validValues.length > 1 && validValues.every(val => val > 0) && Math.min(...validValues) > 1) {
     returns = toReturns(returns);
   }
 
   // Remove NaN values unless explicitly requested
   if (!nans) {
-    returns = returns.filter(val => !isNaN(val) && isFinite(val));
+    returns = returns.filter(val => 
+      val !== null && 
+      val !== undefined && 
+      !isNaN(val) && 
+      isFinite(val) && 
+      typeof val === 'number'
+    );
   }
 
   // Subtract risk-free rate

@@ -54,16 +54,22 @@ export function sharpe(returns, rfRate = 0, nans = false) {
     return 0;
   }
   
+  if (cleanReturns.length === 1) {
+    return 0; // Cannot calculate Sharpe ratio with single value
+  }
+  
   const mean = cleanReturns.reduce((sum, ret) => sum + ret, 0) / cleanReturns.length;
-  const variance = cleanReturns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / cleanReturns.length;
+  
+  // Use sample standard deviation (ddof=1) like Python
+  const variance = cleanReturns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / (cleanReturns.length - 1);
   const std = Math.sqrt(variance);
   
   if (std === 0) {
     return 0;
   }
   
-  // Annualized Sharpe ratio
-  return (mean * Math.sqrt(TRADING_DAYS_PER_YEAR)) / (std * Math.sqrt(TRADING_DAYS_PER_YEAR));
+  // Correct annualized Sharpe ratio: (mean / std) * sqrt(252)
+  return (mean / std) * Math.sqrt(TRADING_DAYS_PER_YEAR);
 }
 
 /**
@@ -81,6 +87,10 @@ export function sortino(returns, rfRate = 0, nans = false) {
     return 0;
   }
   
+  if (cleanReturns.length === 1) {
+    return 0; // Cannot calculate Sortino ratio with single value
+  }
+  
   const mean = cleanReturns.reduce((sum, ret) => sum + ret, 0) / cleanReturns.length;
   
   // Calculate downside deviation (only negative returns)
@@ -90,15 +100,16 @@ export function sortino(returns, rfRate = 0, nans = false) {
     return Infinity;
   }
   
-  const downsideVariance = negativeReturns.reduce((sum, ret) => sum + Math.pow(ret, 2), 0) / cleanReturns.length;
+  // Use sample standard deviation approach (ddof=1 equivalent)
+  const downsideVariance = negativeReturns.reduce((sum, ret) => sum + Math.pow(ret, 2), 0) / (cleanReturns.length - 1);
   const downsideStd = Math.sqrt(downsideVariance);
   
   if (downsideStd === 0) {
     return 0;
   }
   
-  // Annualized Sortino ratio
-  return (mean * Math.sqrt(TRADING_DAYS_PER_YEAR)) / (downsideStd * Math.sqrt(TRADING_DAYS_PER_YEAR));
+  // Correct annualized Sortino ratio: (mean / downside_std) * sqrt(252)
+  return (mean / downsideStd) * Math.sqrt(TRADING_DAYS_PER_YEAR);
 }
 
 /**
@@ -135,8 +146,14 @@ export function volatility(returns, nans = false) {
     return 0;
   }
   
+  if (cleanReturns.length === 1) {
+    return 0; // Cannot calculate volatility with single value
+  }
+  
   const mean = cleanReturns.reduce((sum, ret) => sum + ret, 0) / cleanReturns.length;
-  const variance = cleanReturns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / cleanReturns.length;
+  
+  // Use sample standard deviation (ddof=1) like Python
+  const variance = cleanReturns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / (cleanReturns.length - 1);
   const std = Math.sqrt(variance);
   
   // Annualized volatility
@@ -322,22 +339,28 @@ export function cvar(returns, confidence = 0.05, nans = false) {
  */
 export function skew(returns, nans = false) {
   const cleanReturns = prepareReturns(returns, 0, nans);
+  const n = cleanReturns.length;
   
-  if (cleanReturns.length === 0) {
+  if (n <= 1) {
     return 0;
   }
   
-  const mean = cleanReturns.reduce((sum, ret) => sum + ret, 0) / cleanReturns.length;
-  const variance = cleanReturns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / cleanReturns.length;
+  const mean = cleanReturns.reduce((sum, ret) => sum + ret, 0) / n;
+  // Use sample standard deviation (divide by n-1)
+  const variance = cleanReturns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / (n - 1);
   const std = Math.sqrt(variance);
   
   if (std === 0) {
     return 0;
   }
   
-  const skewness = cleanReturns.reduce((sum, ret) => sum + Math.pow((ret - mean) / std, 3), 0) / cleanReturns.length;
+  // Calculate sample skewness with bias correction
+  const skewness = cleanReturns.reduce((sum, ret) => sum + Math.pow((ret - mean) / std, 3), 0) / n;
   
-  return skewness;
+  // Apply bias correction factor (matches pandas)
+  const biasCorrection = Math.sqrt(n * (n - 1)) / (n - 2);
+  
+  return n <= 2 ? 0 : skewness * biasCorrection;
 }
 
 /**
@@ -349,23 +372,29 @@ export function skew(returns, nans = false) {
  */
 export function kurtosis(returns, nans = false) {
   const cleanReturns = prepareReturns(returns, 0, nans);
+  const n = cleanReturns.length;
   
-  if (cleanReturns.length === 0) {
+  if (n <= 1) {
     return 0;
   }
   
-  const mean = cleanReturns.reduce((sum, ret) => sum + ret, 0) / cleanReturns.length;
-  const variance = cleanReturns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / cleanReturns.length;
+  const mean = cleanReturns.reduce((sum, ret) => sum + ret, 0) / n;
+  // Use sample standard deviation (divide by n-1)
+  const variance = cleanReturns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / (n - 1);
   const std = Math.sqrt(variance);
   
   if (std === 0) {
     return 0;
   }
   
-  const kurtosis = cleanReturns.reduce((sum, ret) => sum + Math.pow((ret - mean) / std, 4), 0) / cleanReturns.length;
+  // Calculate sample kurtosis with bias correction
+  const kurtosis = cleanReturns.reduce((sum, ret) => sum + Math.pow((ret - mean) / std, 4), 0) / n;
   
-  // Return excess kurtosis (subtract 3 for normal distribution)
-  return kurtosis - 3;
+  // Apply bias correction factor (matches pandas)
+  const biasCorrection = (n - 1) * ((n + 1) * kurtosis - 3 * (n - 1)) / ((n - 2) * (n - 3));
+  
+  // Return excess kurtosis (pandas default)
+  return n <= 3 ? 0 : biasCorrection;
 }
 
 /**

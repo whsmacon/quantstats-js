@@ -1,15 +1,14 @@
 {
   "name": "quantstats-js",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Portfolio analytics for quantitative trading - Node.js implementation",
   "main": "index.js",
   "type": "module",
   "scripts": {
     "test": "node --test test/**/*.test.js",
     "test:watch": "node --test --watch test/**/*.test.js",
-    "example": "node examples.js",
     "lint": "eslint src/ test/ --fix",
-    "format": "prettier --write src/ test/ examples.js index.js",
+    "format": "prettier --write src/ test/ index.js",
     "validate": "npm run lint && npm run test",
     "benchmark": "node --test test/**/*.test.js --reporter=tap | grep -E '(duration_ms|tests|pass|fail)'"
   },
