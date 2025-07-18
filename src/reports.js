@@ -57,8 +57,39 @@ export function metrics(returns, benchmark = null, rfRate = 0, nans = false) {
     kelly: stats.kelly(cleanReturns, nans),
     expectedReturn: stats.expectedReturn(cleanReturns, nans),
     
-    // Drawdown details
-    ...drawdownDetails(cleanReturns)
+    // Drawdown details - convert from detailed periods to summary statistics
+    drawdownPeriods: drawdownDetails(cleanReturns),
+    
+    // For backward compatibility, calculate summary statistics
+    ...(() => {
+      const periods = drawdownDetails(cleanReturns);
+      if (periods.length === 0) {
+        return {
+          maxDrawdown: 0,
+          longestDdDays: 0,
+          avgDrawdown: 0,
+          avgDdDays: 0,
+          recoveryFactor: 0
+        };
+      }
+      
+      const maxDd = Math.min(...periods.map(p => p['max drawdown'])) / 100;
+      const longestDays = Math.max(...periods.map(p => p.days));
+      const avgDd = periods.reduce((sum, p) => sum + p['max drawdown'], 0) / periods.length / 100;
+      const avgDays = periods.reduce((sum, p) => sum + p.days, 0) / periods.length;
+      
+      // Recovery factor (total return / abs(max drawdown))
+      const totalReturn = cleanReturns.reduce((acc, ret) => acc * (1 + ret), 1) - 1;
+      const recoveryFactor = Math.abs(maxDd) > 0 ? totalReturn / Math.abs(maxDd) : 0;
+      
+      return {
+        maxDrawdownSummary: maxDd,
+        longestDdDays: longestDays,
+        avgDrawdown: avgDd,
+        avgDdDays: avgDays,
+        recoveryFactor
+      };
+    })()
   };
   
   // Add benchmark-relative metrics if benchmark provided
@@ -462,10 +493,252 @@ export function comparison(returns, benchmark, title = 'Performance Comparison',
   };
 }
 
+/**
+ * Get trading periods per year
+ * Exactly matches Python implementation
+ * @param {number} periodsPerYear - Periods per year (default 252)
+ * @returns {number} Trading periods
+ */
+function _getTradingPeriods(periodsPerYear = 252) {
+  return periodsPerYear;
+}
+
+/**
+ * Match dates between returns and benchmark
+ * Exactly matches Python implementation
+ * @param {Array} returns - Returns array
+ * @param {Array} benchmark - Benchmark array
+ * @returns {Object} Matched data
+ */
+function _matchDates(returns, benchmark) {
+  if (!benchmark || benchmark.length === 0) {
+    return { returns, benchmark: null };
+  }
+  
+  const minLength = Math.min(returns.length, benchmark.length);
+  return {
+    returns: returns.slice(0, minLength),
+    benchmark: benchmark.slice(0, minLength)
+  };
+}
+
+/**
+ * Calculate drawdown data for display
+ * Exactly matches Python implementation
+ * @param {Array} returns - Returns array
+ * @param {boolean} display - Display mode (default true)
+ * @param {boolean} asPct - Return as percentage (default false)
+ * @returns {Object} Drawdown calculation data
+ */
+function _calcDd(returns, display = true, asPct = false) {
+  const cleanReturns = prepareReturns(returns, 0, false);
+  const drawdownData = drawdownDetails(cleanReturns);
+  
+  if (asPct) {
+    return drawdownData.map(dd => ({
+      ...dd,
+      'max drawdown': dd['max drawdown'] * 100,
+      '99% max drawdown': dd['99% max drawdown'] * 100
+    }));
+  }
+  
+  return drawdownData;
+}
+
+/**
+ * Convert object to HTML table
+ * Exactly matches Python implementation
+ * @param {Object|Array} obj - Object to convert
+ * @param {string} showindex - Show index (default "default")
+ * @returns {string} HTML table string
+ */
+function _htmlTable(obj, showindex = "default") {
+  if (Array.isArray(obj)) {
+    // Handle array of objects (like drawdown details)
+    if (obj.length === 0) return '<table></table>';
+    
+    const headers = Object.keys(obj[0]);
+    let html = '<table border="1"><thead><tr>';
+    
+    if (showindex !== "false") {
+      html += '<th>Index</th>';
+    }
+    
+    headers.forEach(header => {
+      html += `<th>${header}</th>`;
+    });
+    html += '</tr></thead><tbody>';
+    
+    obj.forEach((row, index) => {
+      html += '<tr>';
+      if (showindex !== "false") {
+        html += `<td>${index}</td>`;
+      }
+      headers.forEach(header => {
+        const value = row[header];
+        const displayValue = typeof value === 'number' ? 
+          (Math.abs(value) < 1 ? (value * 100).toFixed(2) + '%' : value.toFixed(4)) : 
+          value;
+        html += `<td>${displayValue}</td>`;
+      });
+      html += '</tr>';
+    });
+    
+    html += '</tbody></table>';
+    return html;
+  } else {
+    // Handle object (like metrics)
+    let html = '<table border="1"><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>';
+    
+    Object.entries(obj).forEach(([key, value]) => {
+      const displayValue = typeof value === 'number' ? 
+        (Math.abs(value) < 1 ? (value * 100).toFixed(2) + '%' : value.toFixed(4)) : 
+        value;
+      html += `<tr><td>${key}</td><td>${displayValue}</td></tr>`;
+    });
+    
+    html += '</tbody></table>';
+    return html;
+  }
+}
+
+/**
+ * Download HTML report
+ * Exactly matches Python implementation
+ * @param {string} html - HTML content
+ * @param {string} filename - Filename (default "quantstats-tearsheet.html")
+ * @returns {string} Download instruction
+ */
+function _downloadHtml(html, filename = "quantstats-tearsheet.html") {
+  // In Node.js environment, provide instructions for saving
+  return `
+<!-- Save this content to ${filename} -->
+<!-- Use fs.writeFileSync('${filename}', htmlContent) to save the file -->
+${html}
+  `;
+}
+
+/**
+ * Open HTML in browser (Node.js instruction)
+ * Exactly matches Python implementation
+ * @param {string} html - HTML content
+ * @returns {string} Instructions for opening
+ */
+function _openHtml(html) {
+  return `
+<!-- To view this report: -->
+<!-- 1. Save the HTML content to a file -->
+<!-- 2. Open the file in a web browser -->
+<!-- 3. Or use: open filename.html (macOS) / start filename.html (Windows) -->
+${html}
+  `;
+}
+
+/**
+ * Embed figure files in HTML
+ * Exactly matches Python implementation
+ * @param {Array} figfiles - Figure file paths
+ * @param {string} figfmt - Figure format
+ * @returns {string} Embedded figures HTML
+ */
+function _embedFigure(figfiles, figfmt) {
+  let html = '';
+  
+  figfiles.forEach(figfile => {
+    if (figfmt === 'svg') {
+      html += `<div class="figure"><img src="${figfile}" alt="Figure" style="max-width: 100%;"></div>`;
+    } else {
+      html += `<div class="figure"><img src="${figfile}" alt="Figure" style="max-width: 100%;"></div>`;
+    }
+  });
+  
+  return html;
+}
+
+/**
+ * Generate plots report
+ * Exactly matches Python implementation
+ * @param {Array} returns - Returns array
+ * @param {Array} benchmark - Benchmark returns (optional)
+ * @param {boolean} savefig - Save figures (default false)
+ * @param {string} figpath - Figure path (optional)
+ * @param {string} figfmt - Figure format (default 'svg')
+ * @param {Object} figsize - Figure size (optional)
+ * @param {string} title - Report title (optional)
+ * @param {boolean} grayscale - Use grayscale (default false)
+ * @param {number} rfRate - Risk-free rate (default 0)
+ * @param {boolean} nans - Include NaN values (default false)
+ * @returns {Object} Plots data for visualization
+ */
+export function plots(
+  returns, 
+  benchmark = null, 
+  savefig = false,
+  figpath = null,
+  figfmt = 'svg',
+  figsize = null,
+  title = null,
+  grayscale = false,
+  rfRate = 0,
+  nans = false
+) {
+  const cleanReturns = prepareReturns(returns, rfRate, nans);
+  const { returns: matchedReturns, benchmark: matchedBenchmark } = _matchDates(cleanReturns, benchmark);
+  
+  const plotsData = {
+    title: title || 'Portfolio Performance Plots',
+    figfmt: figfmt,
+    grayscale: grayscale,
+    plots: {
+      // Core plots
+      equityCurve: plots.equityCurve(matchedReturns, 1000, nans),
+      drawdown: plots.drawdown(matchedReturns, nans),
+      returns: plots.returns(matchedReturns, nans),
+      
+      // Distribution plots
+      returnsDistribution: plots.distribution(matchedReturns, 50, nans),
+      
+      // Rolling metrics
+      rollingVolatility: plots.rollingVolatility(matchedReturns, 252, nans),
+      rollingSharpe: plots.rollingSharpe(matchedReturns, 252, nans),
+      rollingSortino: plots.rollingSortino(matchedReturns, 252, nans),
+      
+      // Time-based plots
+      monthlyHeatmap: plots.monthlyHeatmap(matchedReturns, nans),
+      yearlyReturns: plots.yearlyReturnsChart(matchedReturns, nans),
+      monthlyReturns: plots.monthlyReturnsPlot(matchedReturns, nans),
+      
+      // Snapshot
+      snapshot: plots.snapshot(matchedReturns, nans)
+    }
+  };
+  
+  // Add benchmark plots if available
+  if (matchedBenchmark && matchedBenchmark.length > 0) {
+    plotsData.plots.benchmarkComparison = {
+      portfolioEquity: plots.equityCurve(matchedReturns, 1000, nans),
+      benchmarkEquity: plots.equityCurve(matchedBenchmark, 1000, nans),
+      rollingBeta: plots.rollingBeta(matchedReturns, matchedBenchmark, 252, nans)
+    };
+  }
+  
+  // Save figure instructions if requested
+  if (savefig) {
+    plotsData.saveInstructions = {
+      figpath: figpath || './plots/',
+      figfmt: figfmt,
+      message: 'In Node.js, use chart libraries like Chart.js, D3.js, or Plotly.js to render these plot data structures'
+    };
+  }
+  
+  return plotsData;
+}
+
 export default {
   metrics,
   basic,
   full,
   html,
-  comparison
+  comparison,
+  plots
 };

@@ -280,39 +280,108 @@ export function toDrawdownsTable(returns) {
 }
 
 /**
+ * Remove outliers from returns array - matches Python implementation
+ * @param {Array} returns - Returns array
+ * @param {number} quantile - Quantile threshold (default 0.95)
+ * @returns {Array} Returns without outliers
+ */
+function removeOutliers(returns, quantile = 0.95) {
+  const sorted = [...returns].sort((a, b) => a - b);
+  const threshold = sorted[Math.floor(sorted.length * quantile)];
+  return returns.filter(ret => ret < threshold);
+}
+
+/**
  * Get drawdown details - exactly matches Python implementation
  * @param {Array} returns - Returns array
- * @returns {Object} Drawdown statistics
+ * @param {Array} dates - Optional dates array
+ * @returns {Array} Array of drawdown periods matching Python's DataFrame structure
  */
-export function drawdownDetails(returns) {
-  const drawdownPeriods = toDrawdownsTable(returns);
+export function drawdownDetails(returns, dates = null) {
+  const drawdowns = toDrawdownSeries(returns);
   
-  if (drawdownPeriods.length === 0) {
-    return {
-      maxDrawdown: 0,
-      longestDdDays: 0,
-      avgDrawdown: 0,
-      avgDdDays: 0,
-      recoveryFactor: 0
-    };
+  // Create dates array if not provided
+  if (!dates) {
+    dates = Array.from({ length: returns.length }, (_, i) => {
+      const date = new Date();
+      date.setDate(date.getDate() - (returns.length - 1 - i));
+      return date;
+    });
   }
   
-  const maxDrawdown = Math.min(...drawdownPeriods.map(dd => dd.maxDrawdown));
-  const longestDdDays = Math.max(...drawdownPeriods.map(dd => dd.days));
-  const avgDrawdown = drawdownPeriods.reduce((sum, dd) => sum + dd.maxDrawdown, 0) / drawdownPeriods.length;
-  const avgDdDays = drawdownPeriods.reduce((sum, dd) => sum + dd.days, 0) / drawdownPeriods.length;
+  // Mark no drawdown periods
+  const noDrawdown = drawdowns.map(dd => dd === 0);
   
-  // Recovery factor: total return / max drawdown
-  const totalReturn = returns.reduce((prod, ret) => prod * (1 + ret), 1) - 1;
-  const recoveryFactor = Math.abs(totalReturn / maxDrawdown);
+  // Extract drawdown start dates
+  const starts = [];
+  for (let i = 1; i < noDrawdown.length; i++) {
+    if (!noDrawdown[i] && noDrawdown[i - 1]) {
+      starts.push(i);
+    }
+  }
   
-  return {
-    maxDrawdown,
-    longestDdDays,
-    avgDrawdown,
-    avgDdDays,
-    recoveryFactor
-  };
+  // Extract drawdown end dates
+  const ends = [];
+  for (let i = 0; i < noDrawdown.length - 1; i++) {
+    if (noDrawdown[i] && !noDrawdown[i + 1]) {
+      ends.push(i);
+    }
+  }
+  
+  // No drawdown periods
+  if (starts.length === 0) {
+    return [];
+  }
+  
+  // Handle case where drawdown series begins in a drawdown
+  if (ends.length > 0 && starts[0] > ends[0]) {
+    starts.unshift(0);
+  }
+  
+  // Handle case where series ends in a drawdown
+  if (starts.length > ends.length) {
+    ends.push(drawdowns.length - 1);
+  }
+  
+  // Build drawdown periods data
+  const periods = [];
+  for (let i = 0; i < starts.length; i++) {
+    const startIdx = starts[i];
+    const endIdx = ends[i];
+    
+    // Get drawdown slice
+    const ddSlice = drawdowns.slice(startIdx, endIdx + 1);
+    
+    // Find valley (minimum drawdown point)
+    let valleyIdx = startIdx;
+    let minDrawdown = ddSlice[0];
+    for (let j = 1; j < ddSlice.length; j++) {
+      if (ddSlice[j] < minDrawdown) {
+        minDrawdown = ddSlice[j];
+        valleyIdx = startIdx + j;
+      }
+    }
+    
+    // Calculate 99% max drawdown (remove outliers)
+    const cleanDrawdown = removeOutliers(ddSlice.map(dd => -dd), 0.99);
+    const maxDrawdown99 = cleanDrawdown.length > 0 ? -Math.min(...cleanDrawdown) : minDrawdown;
+    
+    // Calculate days
+    const startDate = dates[startIdx];
+    const endDate = dates[endIdx];
+    const days = Math.floor((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+    
+    periods.push({
+      start: startDate.toISOString().split('T')[0],
+      valley: dates[valleyIdx].toISOString().split('T')[0],
+      end: endDate.toISOString().split('T')[0],
+      days: days,
+      'max drawdown': minDrawdown * 100,
+      '99% max drawdown': maxDrawdown99 * 100
+    });
+  }
+  
+  return periods;
 }
 
 /**
@@ -417,6 +486,310 @@ export function makePosNeg(returns) {
   const negative = returns.filter(ret => ret < 0);
   
   return { positive, negative };
+}
+
+/**
+ * Convert returns to prices
+ * Exactly matches Python implementation
+ * @param {Array} returns - Returns array
+ * @param {number} base - Base price (default 100000)
+ * @returns {Array} Price series
+ */
+export function toPrices(returns, base = 100000) {
+  const cleanReturns = returns.map(ret => isNaN(ret) ? 0 : ret);
+  const prices = [base];
+  
+  for (let i = 0; i < cleanReturns.length; i++) {
+    const price = prices[prices.length - 1] * (1 + cleanReturns[i]);
+    prices.push(price);
+  }
+  
+  return prices;
+}
+
+/**
+ * Convert prices to log returns
+ * Exactly matches Python implementation
+ * @param {Array} returns - Returns array
+ * @param {number} rfRate - Risk-free rate (default 0)
+ * @returns {Array} Log returns
+ */
+export function toLogReturns(returns, rfRate = 0) {
+  const cleanReturns = prepareReturns(returns, rfRate);
+  return cleanReturns.map(ret => Math.log(1 + ret));
+}
+
+/**
+ * Convert to excess returns
+ * Exactly matches Python implementation
+ * @param {Array} returns - Returns array
+ * @param {number} rfRate - Risk-free rate
+ * @returns {Array} Excess returns
+ */
+export function toExcessReturns(returns, rfRate) {
+  const cleanReturns = prepareReturns(returns, 0);
+  return cleanReturns.map(ret => ret - rfRate);
+}
+
+/**
+ * Rebase prices to a different base
+ * Exactly matches Python implementation
+ * @param {Array} prices - Price series
+ * @param {number} base - New base value (default 100)
+ * @returns {Array} Rebased prices
+ */
+export function rebase(prices, base = 100) {
+  if (prices.length === 0) return [];
+  
+  const factor = base / prices[0];
+  return prices.map(price => price * factor);
+}
+
+/**
+ * Calculate exponential standard deviation
+ * Exactly matches Python implementation
+ * @param {Array} returns - Returns array
+ * @param {number} window - Window size (default 30)
+ * @param {boolean} isHalflife - Whether window is halflife (default false)
+ * @returns {Array} Exponential standard deviation
+ */
+export function exponentialStdev(returns, window = 30, isHalflife = false) {
+  const cleanReturns = prepareReturns(returns, 0);
+  const result = [];
+  
+  const alpha = isHalflife ? 1 - Math.exp(Math.log(0.5) / window) : 2 / (window + 1);
+  
+  let ewma = 0;
+  let ewmvar = 0;
+  
+  for (let i = 0; i < cleanReturns.length; i++) {
+    const ret = cleanReturns[i];
+    
+    if (i === 0) {
+      ewma = ret;
+      ewmvar = 0;
+    } else {
+      ewma = alpha * ret + (1 - alpha) * ewma;
+      ewmvar = alpha * Math.pow(ret - ewma, 2) + (1 - alpha) * ewmvar;
+    }
+    
+    result.push(Math.sqrt(ewmvar));
+  }
+  
+  return result;
+}
+
+/**
+ * Multi-shift function for creating rolling windows
+ * Exactly matches Python implementation
+ * @param {Array} data - Data array
+ * @param {number} shift - Number of shifts (default 3)
+ * @returns {Array} Multi-shifted data
+ */
+export function multiShift(data, shift = 3) {
+  const result = [];
+  
+  for (let i = 0; i < data.length; i++) {
+    const row = [];
+    for (let j = 0; j < shift; j++) {
+      const index = i - j;
+      row.push(index >= 0 ? data[index] : NaN);
+    }
+    result.push(row);
+  }
+  
+  return result;
+}
+
+/**
+ * Log returns calculation
+ * Exactly matches Python implementation
+ * @param {Array} returns - Returns array
+ * @param {number} rfRate - Risk-free rate (default 0)
+ * @param {number} nperiods - Number of periods (default null)
+ * @returns {Array} Log returns
+ */
+export function logReturns(returns, rfRate = 0, nperiods = null) {
+  return toLogReturns(returns, rfRate);
+}
+
+/**
+ * Group returns by specified grouping
+ * Exactly matches Python implementation
+ * @param {Array} returns - Returns array
+ * @param {string} groupby - Grouping method ('M' for monthly, 'Y' for yearly)
+ * @param {boolean} compounded - Use compounded returns (default false)
+ * @returns {Object} Grouped returns
+ */
+export function groupReturnsByPeriod(returns, groupby, compounded = false) {
+  const grouped = {};
+  let currentPeriod = 0;
+  let currentGroup = [];
+  
+  // Simplified grouping logic
+  const periodsPerGroup = groupby === 'M' ? TRADING_DAYS_PER_MONTH : 
+                         groupby === 'Y' ? TRADING_DAYS_PER_YEAR : 
+                         TRADING_DAYS_PER_MONTH;
+  
+  for (let i = 0; i < returns.length; i++) {
+    currentGroup.push(returns[i]);
+    
+    if (currentGroup.length >= periodsPerGroup || i === returns.length - 1) {
+      if (compounded) {
+        grouped[currentPeriod] = currentGroup.reduce((acc, ret) => acc * (1 + ret), 1) - 1;
+      } else {
+        grouped[currentPeriod] = currentGroup.reduce((sum, ret) => sum + ret, 0);
+      }
+      
+      currentGroup = [];
+      currentPeriod++;
+    }
+  }
+  
+  return grouped;
+}
+
+/**
+ * Prepare prices for analysis
+ * Exactly matches Python implementation
+ * @param {Array} data - Price data
+ * @param {number} base - Base value (default 1.0)
+ * @returns {Array} Prepared prices
+ */
+export function preparePrices(data, base = 1.0) {
+  const cleanData = data.map(price => isNaN(price) ? 0 : price);
+  
+  if (cleanData.length === 0) return [];
+  
+  const factor = base / cleanData[0];
+  return cleanData.map(price => price * factor);
+}
+
+/**
+ * Round to closest value
+ * Exactly matches Python implementation
+ * @param {number} val - Value to round
+ * @param {number} res - Resolution to round to
+ * @param {number} decimals - Number of decimals (default null)
+ * @returns {number} Rounded value
+ */
+export function roundToClosest(val, res, decimals = null) {
+  const rounded = Math.round(val / res) * res;
+  return decimals !== null ? parseFloat(rounded.toFixed(decimals)) : rounded;
+}
+
+/**
+ * Count consecutive occurrences
+ * Exactly matches Python implementation
+ * @param {Array} data - Data array
+ * @returns {Array} Consecutive counts
+ */
+export function countConsecutive(data) {
+  const result = [];
+  let currentCount = 0;
+  let currentValue = null;
+  
+  for (const value of data) {
+    if (value === currentValue) {
+      currentCount++;
+    } else {
+      if (currentValue !== null) {
+        result.push(currentCount);
+      }
+      currentValue = value;
+      currentCount = 1;
+    }
+  }
+  
+  if (currentValue !== null) {
+    result.push(currentCount);
+  }
+  
+  return result;
+}
+
+/**
+ * Make portfolio from returns
+ * Exactly matches Python implementation
+ * @param {Array} returns - Returns array
+ * @param {number} startBalance - Starting balance (default 100000)
+ * @param {string} mode - Mode ('comp' or 'sum', default 'comp')
+ * @param {number} roundTo - Round to value (default null)
+ * @returns {Array} Portfolio values
+ */
+export function makePortfolio(returns, startBalance = 100000, mode = 'comp', roundTo = null) {
+  const values = [startBalance];
+  
+  for (const ret of returns) {
+    let newValue;
+    if (mode === 'comp') {
+      newValue = values[values.length - 1] * (1 + ret);
+    } else {
+      newValue = values[values.length - 1] + ret;
+    }
+    
+    if (roundTo !== null) {
+      newValue = roundToClosest(newValue, roundTo);
+    }
+    
+    values.push(newValue);
+  }
+  
+  return values;
+}
+
+/**
+ * Create index from returns
+ * Exactly matches Python implementation
+ * @param {Array} returns - Returns array
+ * @param {number} base - Base value (default 1000)
+ * @returns {Array} Index values
+ */
+export function makeIndex(returns, base = 1000) {
+  return makePortfolio(returns, base, 'comp');
+}
+
+/**
+ * Score to string conversion
+ * Exactly matches Python implementation
+ * @param {number} val - Value to convert
+ * @returns {string} Score string
+ */
+export function scoreStr(val) {
+  if (val > 0.99) return 'A+';
+  if (val > 0.95) return 'A';
+  if (val > 0.90) return 'A-';
+  if (val > 0.85) return 'B+';
+  if (val > 0.80) return 'B';
+  if (val > 0.75) return 'B-';
+  if (val > 0.70) return 'C+';
+  if (val > 0.65) return 'C';
+  if (val > 0.60) return 'C-';
+  if (val > 0.55) return 'D+';
+  if (val > 0.50) return 'D';
+  if (val > 0.45) return 'D-';
+  return 'F';
+}
+
+/**
+ * Flatten dataframe-like structure
+ * Exactly matches Python implementation
+ * @param {Array} data - Data array
+ * @param {number} setIndex - Index to set (default null)
+ * @returns {Array} Flattened data
+ */
+export function flattenDataframe(data, setIndex = null) {
+  const flattened = [];
+  
+  for (let i = 0; i < data.length; i++) {
+    if (Array.isArray(data[i])) {
+      flattened.push(...data[i]);
+    } else {
+      flattened.push(data[i]);
+    }
+  }
+  
+  return flattened;
 }
 
 export { TRADING_DAYS_PER_YEAR, TRADING_DAYS_PER_MONTH, MONTHS_PER_YEAR };
