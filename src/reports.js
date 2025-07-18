@@ -4,7 +4,7 @@
  */
 
 import * as stats from './stats.js';
-import * as plots from './plots.js';
+import * as plotsModule from './plots.js';
 import { 
   prepareReturns, 
   drawdownDetails, 
@@ -127,7 +127,7 @@ export function metrics(returns, benchmark = null, rfRate = 0, nans = false) {
  */
 export function basic(returns, benchmark = null, title = 'Portfolio Performance Report', rfRate = 0, nans = false) {
   const performanceMetrics = metrics(returns, benchmark, rfRate, nans);
-  const dashboardData = plots.dashboard(returns, nans);
+  const dashboardData = plotsModule.dashboard(returns, nans);
   
   const html = `
 <!DOCTYPE html>
@@ -691,25 +691,25 @@ export function plots(
     grayscale: grayscale,
     plots: {
       // Core plots
-      equityCurve: plots.equityCurve(matchedReturns, 1000, nans),
-      drawdown: plots.drawdown(matchedReturns, nans),
-      returns: plots.returns(matchedReturns, nans),
+      equityCurve: plotsModule.equityCurve(matchedReturns, 1000, nans),
+      drawdown: plotsModule.drawdown(matchedReturns, nans),
+      returns: plotsModule.returns(matchedReturns, nans),
       
       // Distribution plots
-      returnsDistribution: plots.distribution(matchedReturns, 50, nans),
+      returnsDistribution: plotsModule.distribution(matchedReturns, 50, nans),
       
       // Rolling metrics
-      rollingVolatility: plots.rollingVolatility(matchedReturns, 252, nans),
-      rollingSharpe: plots.rollingSharpe(matchedReturns, 252, nans),
-      rollingSortino: plots.rollingSortino(matchedReturns, 252, nans),
+      rollingVolatility: plotsModule.rollingVolatility(matchedReturns, 252, nans),
+      rollingSharpe: plotsModule.rollingSharpe(matchedReturns, 252, nans),
+      rollingSortino: plotsModule.rollingSortino(matchedReturns, 252, nans),
       
       // Time-based plots
-      monthlyHeatmap: plots.monthlyHeatmap(matchedReturns, nans),
-      yearlyReturns: plots.yearlyReturnsChart(matchedReturns, nans),
-      monthlyReturns: plots.monthlyReturnsPlot(matchedReturns, nans),
+      monthlyHeatmap: plotsModule.monthlyHeatmap(matchedReturns, nans),
+      yearlyReturns: plotsModule.yearlyReturnsChart(matchedReturns, nans),
+      monthlyReturns: plotsModule.monthlyReturnsPlot(matchedReturns, nans),
       
       // Snapshot
-      snapshot: plots.snapshot(matchedReturns, nans)
+      snapshot: plotsModule.snapshot(matchedReturns, nans)
     }
   };
   
