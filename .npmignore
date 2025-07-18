@@ -1,0 +1,52 @@
+# Development files
+.eslintrc.json
+.prettierrc
+.gitignore
+
+# Test files
+test/
+coverage/
+
+# Development scripts
+examples.js
+
+# Python library (this is the Node.js port)
+python/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Dependency directories (should not be published)
+node_modules/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# dotenv environment variables file
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
