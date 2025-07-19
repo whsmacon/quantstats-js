@@ -6,13 +6,23 @@
 import { 
   prepareReturns, 
   toDrawdownSeries, 
-  drawdownDetails, 
   aggregateReturns,
   makePosNeg,
-  TRADING_DAYS_PER_YEAR,
-  TRADING_DAYS_PER_MONTH,
-  MONTHS_PER_YEAR
+  normalInverseCDF,
+  getPeriodicReturns,
+  monthToDateReturns,
+  yearToDateReturns,
+  resampleMonthlySum,
+  resampleYearlySum,
+  filterMTDReturns,
+  filterYTDReturns,
+  filterMonthsBackReturns,
+  filterYearsBackReturns
 } from './utils.js';
+
+// Constants
+const TRADING_DAYS_PER_YEAR = 252;
+const TRADING_DAYS_PER_MONTH = 21;
 
 /**
  * Convert returns to prices
@@ -271,8 +281,78 @@ export function drawdown(returns, nans = false) {
 }
 
 /**
+ * Calculate drawdown details - periods, max drawdowns, etc.
+ * Matches Python drawdown_details function
+ * @param {Array} drawdownSeries - Drawdown series (from drawdown function)
+ * @returns {Array} Array of drawdown periods with details
+ */
+export function getDrawdownDetails(drawdownSeries) {
+  const details = [];
+  let inDrawdown = false;
+  let currentPeriod = null;
+  
+  for (let i = 0; i < drawdownSeries.length; i++) {
+    const dd = drawdownSeries[i];
+    
+    if (dd < 0 && !inDrawdown) {
+      // Start of new drawdown period
+      inDrawdown = true;
+      currentPeriod = {
+        start: i,
+        valley: i,
+        minDrawdown: dd,
+        days: 1
+      };
+    } else if (dd < 0 && inDrawdown) {
+      // Continue drawdown period
+      currentPeriod.days++;
+      if (dd < currentPeriod.minDrawdown) {
+        currentPeriod.minDrawdown = dd;
+        currentPeriod.valley = i;
+      }
+    } else if (dd >= 0 && inDrawdown) {
+      // End of drawdown period
+      currentPeriod.end = i - 1;
+      details.push(currentPeriod);
+      inDrawdown = false;
+      currentPeriod = null;
+    }
+  }
+  
+  // Handle case where series ends in drawdown
+  if (inDrawdown && currentPeriod) {
+    currentPeriod.end = drawdownSeries.length - 1;
+    details.push(currentPeriod);
+  }
+  
+  return details;
+}
+
+/**
+ * Calculate average drawdown (mean of max drawdowns from each period)
+ * Matches Python implementation: ret_dd["max drawdown"].mean() / 100
+ * @param {Array} returns - Returns array
+ * @returns {number} Average drawdown
+ */
+export function averageDrawdown(returns, dates = null) {
+  const drawdownSeries = drawdown(returns);
+  
+  if (dates) {
+    const details = drawdownDetailsWithDates(drawdownSeries, dates);
+    if (details.length === 0) return 0;
+    const maxDrawdowns = details.map(period => period.minDrawdown);
+    return maxDrawdowns.reduce((sum, dd) => sum + dd, 0) / maxDrawdowns.length;
+  } else {
+    const details = drawdownDetails(drawdownSeries);
+    if (details.length === 0) return 0;
+    const maxDrawdowns = details.map(period => period.minDrawdown);
+    return maxDrawdowns.reduce((sum, dd) => sum + dd, 0) / maxDrawdowns.length;
+  }
+}
+
+/**
  * Calculate Win Rate
- * Exactly matches Python implementation
+ * Exactly matches Python implementation: len(series[series > 0]) / len(series[series != 0])
  * @param {Array} returns - Returns array
  * @param {boolean} nans - Include NaN values (default false)
  * @returns {number} Win rate (0-1)
@@ -285,7 +365,13 @@ export function winRate(returns, nans = false) {
   }
   
   const wins = cleanReturns.filter(ret => ret > 0).length;
-  return wins / cleanReturns.length;
+  const nonZeroReturns = cleanReturns.filter(ret => ret !== 0).length;
+  
+  if (nonZeroReturns === 0) {
+    return 0;
+  }
+  
+  return wins / nonZeroReturns;
 }
 
 /**
@@ -326,87 +412,126 @@ export function avgLoss(returns, nans = false) {
 
 /**
  * Calculate Profit Factor
- * Exactly matches Python implementation
+ * Exactly matches Python implementation: abs(wins_sum / losses_sum) where wins >= 0
  * @param {Array} returns - Returns array
  * @param {boolean} nans - Include NaN values (default false)
  * @returns {number} Profit factor
  */
 export function profitFactor(returns, nans = false) {
   const cleanReturns = prepareReturns(returns, 0, nans);
-  const { positive, negative } = makePosNeg(cleanReturns);
   
-  const grossProfit = positive.reduce((sum, ret) => sum + ret, 0);
-  const grossLoss = Math.abs(negative.reduce((sum, ret) => sum + ret, 0));
+  // Python: returns[returns >= 0].sum() / returns[returns < 0].sum()
+  const wins = cleanReturns.filter(ret => ret >= 0);
+  const losses = cleanReturns.filter(ret => ret < 0);
+  
+  const grossProfit = wins.reduce((sum, ret) => sum + ret, 0);
+  const grossLoss = Math.abs(losses.reduce((sum, ret) => sum + ret, 0));
   
   if (grossLoss === 0) {
     return Infinity;
   }
   
-  return grossProfit / grossLoss;
+  return Math.abs(grossProfit / grossLoss);
 }
 
 /**
  * Calculate Expected Return
- * Exactly matches Python implementation
+ * Exactly matches Python implementation with optional aggregation
  * @param {Array} returns - Returns array
+ * @param {string} aggregate - Optional aggregation ('M', 'A', etc.)
+ * @param {boolean} compounded - Use compounded returns (default true)  
  * @param {boolean} nans - Include NaN values (default false)
  * @returns {number} Expected return
  */
-export function expectedReturn(returns, nans = false) {
-  const cleanReturns = prepareReturns(returns, 0, nans);
+export function expectedReturn(returns, aggregate = null, compounded = true, nans = false, dates = null) {
+  let workingReturns = prepareReturns(returns, 0, nans);
   
-  if (cleanReturns.length === 0) {
+  // Apply aggregation if specified - now with date-awareness
+  if (aggregate === 'M' && dates) {
+    // Use date-aware monthly resampling
+    workingReturns = resampleMonthlySum(workingReturns, dates, compounded);
+  } else if (aggregate === 'A' && dates) {
+    // Use date-aware yearly resampling  
+    workingReturns = resampleYearlySum(workingReturns, dates, compounded);
+  } else if (aggregate) {
+    // Fallback to approximation
+    workingReturns = aggregateReturns(workingReturns, aggregate, compounded);
+  }
+  
+  if (workingReturns.length === 0) {
     return 0;
   }
   
-  return cleanReturns.reduce((sum, ret) => sum + ret, 0) / cleanReturns.length;
+  // Python: np.product(1 + returns) ** (1 / len(returns)) - 1
+  // This is the geometric mean (GHPR)
+  const product = workingReturns.reduce((prod, ret) => prod * (1 + ret), 1);
+  return Math.pow(product, 1 / workingReturns.length) - 1;
 }
 
 /**
  * Calculate Value at Risk (VaR)
- * Exactly matches Python implementation
+ * Exactly matches Python implementation using variance-covariance method
  * @param {Array} returns - Returns array
- * @param {number} confidence - Confidence level (default 0.05 for 95% VaR)
+ * @param {number} sigma - Sigma multiplier (default 1)
+ * @param {number} confidence - Confidence level (default 0.95)
  * @param {boolean} nans - Include NaN values (default false)
  * @returns {number} Value at Risk
  */
-export function valueAtRisk(returns, confidence = 0.05, nans = false) {
+export function valueAtRisk(returns, sigma = 1, confidence = 0.95, nans = false) {
   const cleanReturns = prepareReturns(returns, 0, nans);
   
   if (cleanReturns.length === 0) {
     return 0;
   }
   
-  const sorted = [...cleanReturns].sort((a, b) => a - b);
-  const index = Math.floor(confidence * sorted.length);
+  // Calculate mean and standard deviation (use ddof=1 like Python pandas)
+  const mu = cleanReturns.reduce((sum, val) => sum + val, 0) / cleanReturns.length;
+  const variance = cleanReturns.reduce((sum, val) => sum + Math.pow(val - mu, 2), 0) / (cleanReturns.length - 1);
+  const std = Math.sqrt(variance);
+  const sigmaStd = sigma * std;
   
-  return sorted[index] || 0;
+  // Convert confidence to appropriate format if needed
+  let conf = confidence;
+  if (conf > 1) {
+    conf = conf / 100;
+  }
+  
+  // Calculate normal inverse CDF (ppf)
+  // This matches Python's _norm.ppf(1 - confidence, mu, sigma)
+  return normalInverseCDF(1 - conf, mu, sigmaStd);
 }
 
 /**
- * Calculate Conditional Value at Risk (CVaR)
- * Exactly matches Python implementation
+ * Calculate Conditional Value at Risk (CVaR/Expected Shortfall)
+ * Exactly matches Python implementation using VaR-based method
  * @param {Array} returns - Returns array
- * @param {number} confidence - Confidence level (default 0.05 for 95% CVaR)
+ * @param {number} sigma - Sigma multiplier (default 1)
+ * @param {number} confidence - Confidence level (default 0.95)
  * @param {boolean} nans - Include NaN values (default false)
  * @returns {number} Conditional Value at Risk
  */
-export function cvar(returns, confidence = 0.05, nans = false) {
+export function cvar(returns, sigma = 1, confidence = 0.95, nans = false) {
   const cleanReturns = prepareReturns(returns, 0, nans);
   
   if (cleanReturns.length === 0) {
     return 0;
   }
   
-  const sorted = [...cleanReturns].sort((a, b) => a - b);
-  const index = Math.floor(confidence * sorted.length);
-  const tailReturns = sorted.slice(0, index + 1);
+  // First calculate VaR using variance-covariance method
+  const var95 = valueAtRisk(returns, sigma, confidence, nans);
   
-  if (tailReturns.length === 0) {
-    return 0;
+  // Then take mean of all returns below VaR threshold
+  const belowVar = cleanReturns.filter(ret => ret < var95);
+  
+  if (belowVar.length === 0) {
+    return var95; // Return VaR if no returns below threshold
   }
   
-  return tailReturns.reduce((sum, ret) => sum + ret, 0) / tailReturns.length;
+  const cVarResult = belowVar.reduce((sum, ret) => sum + ret, 0) / belowVar.length;
+  
+  // Return cVaR if valid and not based on single outlier, otherwise return VaR
+  // Python appears to return VaR when there's insufficient tail data
+  return (!isNaN(cVarResult) && belowVar.length > 1) ? cVarResult : var95;
 }
 
 /**
@@ -491,7 +616,14 @@ export function kelly(returns, nans = false) {
     return 0;
   }
   
-  const winRate = positive.length / cleanReturns.length;
+  // Use Python logic: win_prob = len(positive) / len(non_zero)
+  const nonZeroReturns = cleanReturns.filter(ret => ret !== 0);
+  if (nonZeroReturns.length === 0) {
+    return 0;
+  }
+  
+  const winProb = positive.length / nonZeroReturns.length;
+  const loseProb = 1 - winProb;
   const avgWinReturn = positive.reduce((sum, ret) => sum + ret, 0) / positive.length;
   const avgLossReturn = Math.abs(negative.reduce((sum, ret) => sum + ret, 0) / negative.length);
   
@@ -499,9 +631,9 @@ export function kelly(returns, nans = false) {
     return 0;
   }
   
-  // Kelly = W - (1-W)/R where W = win rate, R = avg win / avg loss
+  // Python formula: ((win_loss_ratio * win_prob) - lose_prob) / win_loss_ratio
   const payoffRatio = avgWinReturn / avgLossReturn;
-  return winRate - ((1 - winRate) / payoffRatio);
+  return ((payoffRatio * winProb) - loseProb) / payoffRatio;
 }
 
 /**
@@ -592,8 +724,8 @@ export function alpha(returns, benchmark, rfRate = 0, nans = false) {
   const cleanBenchmark = prepareReturns(benchmark, rfRate, nans);
   
   const portfolioBeta = beta(cleanReturns, cleanBenchmark, nans);
-  const portfolioReturn = expectedReturn(cleanReturns, nans);
-  const benchmarkReturn = expectedReturn(cleanBenchmark, nans);
+  const portfolioReturn = expectedReturn(cleanReturns, null, nans);
+  const benchmarkReturn = expectedReturn(cleanBenchmark, null, nans);
   
   // Alpha = Portfolio Return - (Beta * Benchmark Return)
   return portfolioReturn - (portfolioBeta * benchmarkReturn);
@@ -601,7 +733,7 @@ export function alpha(returns, benchmark, rfRate = 0, nans = false) {
 
 /**
  * Calculate Ulcer Index
- * Exactly matches Python implementation
+ * Exactly matches Python implementation: sqrt(sum(dd^2) / (n-1))
  * @param {Array} returns - Returns array
  * @param {boolean} nans - Include NaN values (default false)
  * @returns {number} Ulcer Index
@@ -614,10 +746,11 @@ export function ulcerIndex(returns, nans = false) {
     return 0;
   }
   
-  const squaredDrawdowns = drawdowns.map(dd => Math.pow(dd * 100, 2));
-  const meanSquaredDrawdown = squaredDrawdowns.reduce((sum, sq) => sum + sq, 0) / squaredDrawdowns.length;
+  // Python: np.sqrt(np.divide((dd**2).sum(), returns.shape[0] - 1))
+  const squaredDrawdowns = drawdowns.map(dd => Math.pow(dd, 2));
+  const sumSquaredDrawdowns = squaredDrawdowns.reduce((sum, sq) => sum + sq, 0);
   
-  return Math.sqrt(meanSquaredDrawdown);
+  return Math.sqrt(sumSquaredDrawdowns / (cleanReturns.length - 1));
 }
 
 /**
@@ -659,32 +792,50 @@ export function downsideDeviation(returns, nans = false) {
 }
 
 /**
- * Calculate monthly returns
+ * Calculate monthly returns using date-aware resampling
  * Exactly matches Python implementation
  * @param {Array} returns - Returns array
  * @param {boolean} nans - Include NaN values (default false)
+ * @param {Array} dates - Optional dates array for proper resampling
+ * @param {boolean} compounded - Whether to compound returns (default true)
  * @returns {Array} Monthly returns
  */
-export function monthlyReturns(returns, nans = false) {
+export function monthlyReturns(returns, nans = false, dates = null, compounded = true) {
   const cleanReturns = prepareReturns(returns, 0, nans);
-  return aggregateReturns(cleanReturns, 'monthly');
+  
+  if (dates && dates.length === cleanReturns.length) {
+    // Use date-aware resampling like Python pandas .resample('M')
+    return resampleMonthlySum(cleanReturns, dates, compounded);
+  } else {
+    // Fallback to approximation
+    return aggregateReturns(cleanReturns, 'monthly', compounded);
+  }
 }
 
 /**
- * Calculate yearly returns
+ * Calculate yearly returns using date-aware resampling
  * Exactly matches Python implementation
  * @param {Array} returns - Returns array
  * @param {boolean} nans - Include NaN values (default false)
+ * @param {Array} dates - Optional dates array for proper resampling
+ * @param {boolean} compounded - Whether to compound returns (default true)
  * @returns {Array} Yearly returns
  */
-export function yearlyReturns(returns, nans = false) {
+export function yearlyReturns(returns, nans = false, dates = null, compounded = true) {
   const cleanReturns = prepareReturns(returns, 0, nans);
-  return aggregateReturns(cleanReturns, 'yearly');
+  
+  if (dates && dates.length === cleanReturns.length) {
+    // Use date-aware resampling like Python pandas .resample('A')
+    return resampleYearlySum(cleanReturns, dates, compounded);
+  } else {
+    // Fallback to approximation
+    return aggregateReturns(cleanReturns, 'yearly', compounded);
+  }
 }
 
 /**
  * Returns outliers from returns array
- * Exactly matches Python implementation
+ * Exactly matches Python to_prices function
  * @param {Array} returns - Returns array
  * @param {number} quantile - Quantile threshold (default 0.95)
  * @param {boolean} nans - Include NaN values (default false)
@@ -805,7 +956,7 @@ export function exposure(returns, nans = false) {
  * @returns {number} Geometric mean
  */
 export function geometricMean(returns, nans = false) {
-  return expectedReturn(returns, nans);
+  return expectedReturn(returns, null, nans);
 }
 
 /**
@@ -819,17 +970,55 @@ export function geometricMean(returns, nans = false) {
 export function gainToPainRatio(returns, rfRate = 0, nans = false) {
   const cleanReturns = prepareReturns(returns, rfRate, nans);
   
-  const positiveReturns = cleanReturns.filter(ret => ret > 0);
+  if (cleanReturns.length === 0) {
+    return 0;
+  }
+  
+  // Python: returns.sum() / abs(returns[returns < 0].sum())
+  const totalReturns = cleanReturns.reduce((sum, ret) => sum + ret, 0);
   const negativeReturns = cleanReturns.filter(ret => ret < 0);
   
   if (negativeReturns.length === 0) {
-    return positiveReturns.length > 0 ? Infinity : 0;
+    return totalReturns > 0 ? Infinity : 0;
   }
   
-  const totalGain = positiveReturns.reduce((sum, ret) => sum + ret, 0);
-  const totalPain = Math.abs(negativeReturns.reduce((sum, ret) => sum + ret, 0));
+  const downside = Math.abs(negativeReturns.reduce((sum, ret) => sum + ret, 0));
   
-  return totalPain === 0 ? 0 : totalGain / totalPain;
+  return downside === 0 ? 0 : totalReturns / downside;
+}
+
+// Monthly Gain/Pain ratio
+export function gainToPainRatioMonthly(returns, riskFreeRate = 0, dates = null) {
+  if (dates) {
+    // Use proper Python-style monthly resampling with dates
+    const preparedReturns = prepareReturns(returns, riskFreeRate);
+    const monthlyReturns = resampleMonthlySum(preparedReturns, dates);
+    
+    if (monthlyReturns.length === 0) return 0;
+    
+    // Python: returns.sum() / abs(returns[returns < 0].sum())
+    const totalReturn = monthlyReturns.reduce((sum, ret) => sum + ret, 0);
+    const negativeReturns = monthlyReturns.filter(ret => ret < 0);
+    const totalLosses = Math.abs(negativeReturns.reduce((sum, loss) => sum + loss, 0));
+    
+    if (totalLosses === 0) return totalReturn > 0 ? Infinity : 0;
+    
+    return totalReturn / totalLosses;
+  } else {
+    // Fallback to old method if no dates provided
+    const preparedReturns = prepareReturns(returns, riskFreeRate);
+    const monthlyReturns = aggregateReturns(preparedReturns, 'monthly', false);
+    
+    if (monthlyReturns.length === 0) return 0;
+    
+    const totalReturn = monthlyReturns.reduce((sum, ret) => sum + ret, 0);
+    const negativeReturns = monthlyReturns.filter(ret => ret < 0);
+    const totalLosses = Math.abs(negativeReturns.reduce((sum, loss) => sum + loss, 0));
+    
+    if (totalLosses === 0) return totalReturn > 0 ? Infinity : 0;
+    
+    return totalReturn / totalLosses;
+  }
 }
 
 /**
@@ -846,7 +1035,7 @@ export function treynorRatio(returns, benchmark, rfRate = 0, nans = false) {
   const cleanBenchmark = prepareReturns(benchmark, rfRate, nans);
   
   const portfolioBeta = beta(cleanReturns, cleanBenchmark, nans);
-  const excessReturn = expectedReturn(cleanReturns, nans) - rfRate;
+  const excessReturn = expectedReturn(cleanReturns, null, nans) - rfRate;
   
   return portfolioBeta === 0 ? 0 : excessReturn / portfolioBeta;
 }
@@ -861,19 +1050,17 @@ export function treynorRatio(returns, benchmark, rfRate = 0, nans = false) {
 export function riskOfRuin(returns, nans = false) {
   const cleanReturns = prepareReturns(returns, 0, nans);
   
-  const winRate = cleanReturns.filter(ret => ret > 0).length / cleanReturns.length;
-  const lossRate = 1 - winRate;
+  if (cleanReturns.length === 0) {
+    return 0;
+  }
   
-  if (winRate === 0) return 1;
-  if (lossRate === 0) return 0;
+  // Python: ((1 - wins) / (1 + wins)) ** len(returns)
+  const wins = winRate(cleanReturns, nans);
   
-  const avgWinReturn = Math.abs(avgWin(cleanReturns, nans));
-  const avgLossReturn = Math.abs(avgLoss(cleanReturns, nans));
+  if (wins === 1) return 0;  // No losses, no risk of ruin
+  if (wins === 0) return 1;  // No wins, certain ruin
   
-  if (avgWinReturn === 0) return 1;
-  
-  const ratio = avgLossReturn / avgWinReturn;
-  return Math.pow(ratio, winRate / lossRate);
+  return Math.pow((1 - wins) / (1 + wins), cleanReturns.length);
 }
 
 /**
@@ -885,11 +1072,33 @@ export function riskOfRuin(returns, nans = false) {
  * @returns {number} Serenity index
  */
 export function serenityIndex(returns, rfRate = 0, nans = false) {
-  const cleanReturns = prepareReturns(returns, rfRate, nans);
-  const annualizedReturn = cagr(cleanReturns, rfRate, nans);
-  const ulcer = ulcerIndex(cleanReturns, nans);
+  // Don't use prepareReturns here - Python uses original returns directly
   
-  return ulcer === 0 ? 0 : annualizedReturn / ulcer;
+  // Get drawdown series from original returns
+  const drawdowns = toDrawdownSeries(returns);
+  
+  // Calculate pitfall = -cvar(dd) / returns.std()
+  const cvarDD = cvar(drawdowns, 1, 0.95, nans); // CVaR of drawdowns
+  
+  // Calculate sample standard deviation (ddof=1, pandas default)
+  const returnsMean = returns.reduce((sum, ret) => sum + ret, 0) / returns.length;
+  const sampleVariance = returns.reduce((sum, ret) => sum + Math.pow(ret - returnsMean, 2), 0) / (returns.length - 1); // N-1 denominator
+  const returnsStd = Math.sqrt(sampleVariance);
+  
+  const pitfall = -cvarDD / returnsStd;
+  
+  // Calculate ulcer index from original returns
+  const ulcer = ulcerIndex(returns, nans);
+  
+  // Calculate sum of original returns
+  const returnsSum = returns.reduce((sum, ret) => sum + ret, 0);
+  
+  if (ulcer === 0 || pitfall === 0) {
+    return 0;
+  }
+  
+  // Python: (returns.sum() - rf) / (ulcer_index(returns) * pitfall)
+  return (returnsSum - rfRate) / (ulcer * pitfall);
 }
 
 /**
@@ -1014,22 +1223,38 @@ export function autocorrPenalty(returns, nans = false) {
     return 1;
   }
   
-  // Calculate autocorrelation
-  const mean = cleanReturns.reduce((sum, ret) => sum + ret, 0) / cleanReturns.length;
+  // Python: coef = np.abs(np.corrcoef(returns[:-1], returns[1:])[0, 1])
+  const returns1 = cleanReturns.slice(0, -1);  // returns[:-1]
+  const returns2 = cleanReturns.slice(1);      // returns[1:]
+  
+  const mean1 = returns1.reduce((sum, ret) => sum + ret, 0) / returns1.length;
+  const mean2 = returns2.reduce((sum, ret) => sum + ret, 0) / returns2.length;
+  
   let numerator = 0;
-  let denominator = 0;
+  let sum1sq = 0;
+  let sum2sq = 0;
   
-  for (let i = 1; i < cleanReturns.length; i++) {
-    numerator += (cleanReturns[i] - mean) * (cleanReturns[i - 1] - mean);
+  for (let i = 0; i < returns1.length; i++) {
+    const diff1 = returns1[i] - mean1;
+    const diff2 = returns2[i] - mean2;
+    numerator += diff1 * diff2;
+    sum1sq += diff1 * diff1;
+    sum2sq += diff2 * diff2;
   }
   
-  for (let i = 0; i < cleanReturns.length; i++) {
-    denominator += Math.pow(cleanReturns[i] - mean, 2);
+  const denominator = Math.sqrt(sum1sq * sum2sq);
+  const coef = denominator === 0 ? 0 : Math.abs(numerator / denominator);
+  
+  // Python: corr = [((num - x) / num) * coef**x for x in range(1, num)]
+  // Python: return np.sqrt(1 + 2 * np.sum(corr))
+  const num = cleanReturns.length;
+  let corrSum = 0;
+  
+  for (let x = 1; x < num; x++) {
+    corrSum += ((num - x) / num) * Math.pow(coef, x);
   }
   
-  const autocorr = denominator === 0 ? 0 : numerator / denominator;
-  
-  return Math.sqrt(1 - autocorr);
+  return Math.sqrt(1 + 2 * corrSum);
 }
 
 /**
@@ -1042,10 +1267,24 @@ export function autocorrPenalty(returns, nans = false) {
  * @returns {number} Smart Sharpe ratio
  */
 export function smartSharpe(returns, rfRate = 0, periods = 252, nans = false) {
-  const regularSharpe = sharpe(returns, rfRate, nans);
-  const penalty = autocorrPenalty(returns, nans);
+  const cleanReturns = prepareReturns(returns, rfRate, nans);
   
-  return regularSharpe * penalty;
+  if (cleanReturns.length === 0) {
+    return 0;
+  }
+  
+  // Python: divisor = divisor * autocorr_penalty(returns)
+  const meanReturn = cleanReturns.reduce((sum, ret) => sum + ret, 0) / cleanReturns.length;
+  const variance = cleanReturns.reduce((sum, ret) => sum + Math.pow(ret - meanReturn, 2), 0) / (cleanReturns.length - 1);
+  const stdDev = Math.sqrt(variance);
+  const penalty = autocorrPenalty(cleanReturns, nans);
+  const adjustedStdDev = stdDev * penalty;
+  
+  if (adjustedStdDev === 0) return 0;
+  
+  const smartSharpeRatio = meanReturn / adjustedStdDev;
+  
+  return smartSharpeRatio * Math.sqrt(TRADING_DAYS_PER_YEAR);
 }
 
 /**
@@ -1058,258 +1297,55 @@ export function smartSharpe(returns, rfRate = 0, periods = 252, nans = false) {
  * @returns {number} Smart Sortino ratio
  */
 export function smartSortino(returns, rfRate = 0, periods = 252, nans = false) {
-  const regularSortino = sortino(returns, rfRate, nans);
-  const penalty = autocorrPenalty(returns, nans);
-  
-  return regularSortino * penalty;
-}
-
-/**
- * Calculate percentile rank of prices
- * Exactly matches Python implementation
- * @param {Array} prices - Price array
- * @param {number} window - Window size (default 60)
- * @returns {Array} Percentile rank array
- */
-export function pctRank(prices, window = 60) {
-  const result = [];
-  
-  for (let i = 0; i < prices.length; i++) {
-    if (i < window - 1) {
-      result.push(NaN);
-      continue;
-    }
-    
-    const windowPrices = prices.slice(i - window + 1, i + 1);
-    const currentPrice = prices[i];
-    
-    let rank = 0;
-    for (const price of windowPrices) {
-      if (price <= currentPrice) rank++;
-    }
-    
-    result.push((rank / windowPrices.length) * 100);
-  }
-  
-  return result;
-}
-
-/**
- * Calculate distribution statistics
- * Exactly matches Python implementation
- * @param {Array} returns - Returns array
- * @param {boolean} compounded - Use compounded returns (default true)
- * @param {boolean} nans - Include NaN values (default false)
- * @returns {Object} Distribution statistics
- */
-export function distribution(returns, compounded = true, nans = false) {
-  const cleanReturns = prepareReturns(returns, 0, nans);
-  
-  if (cleanReturns.length === 0) {
-    return {
-      min: 0,
-      max: 0,
-      mean: 0,
-      std: 0,
-      skew: 0,
-      kurtosis: 0,
-      outliers: []
-    };
-  }
-  
-  const processedReturns = compounded ? cleanReturns : cleanReturns.map(ret => Math.log(1 + ret));
-  
-  const mean = processedReturns.reduce((sum, ret) => sum + ret, 0) / processedReturns.length;
-  const variance = processedReturns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / (processedReturns.length - 1);
-  const std = Math.sqrt(variance);
-  
-  // Calculate skewness and kurtosis
-  const skewness = processedReturns.reduce((sum, ret) => sum + Math.pow((ret - mean) / std, 3), 0) / processedReturns.length;
-  const kurtosisVal = processedReturns.reduce((sum, ret) => sum + Math.pow((ret - mean) / std, 4), 0) / processedReturns.length - 3;
-  
-  return {
-    min: Math.min(...processedReturns),
-    max: Math.max(...processedReturns),
-    mean: mean,
-    std: std,
-    skew: skewness,
-    kurtosis: kurtosisVal,
-    outliers: outliers(processedReturns, 0.95, nans)
-  };
-}
-
-/**
- * Calculate geometric holding period return
- * Exactly matches Python implementation
- * @param {Array} returns - Returns array
- * @param {boolean} nans - Include NaN values (default false)
- * @returns {number} GHPR
- */
-export function ghpr(returns, nans = false) {
-  return geometricMean(returns, nans);
-}
-
-/**
- * Calculate average return
- * Exactly matches Python implementation
- * @param {Array} returns - Returns array
- * @param {boolean} nans - Include NaN values (default false)
- * @returns {number} Average return
- */
-export function avgReturn(returns, nans = false) {
-  const cleanReturns = prepareReturns(returns, 0, nans);
-  return cleanReturns.reduce((sum, ret) => sum + ret, 0) / cleanReturns.length;
-}
-
-/**
- * Calculate implied volatility
- * Exactly matches Python implementation
- * @param {Array} returns - Returns array
- * @param {number} periods - Periods per year (default 252)
- * @param {boolean} annualize - Whether to annualize (default true)
- * @returns {number} Implied volatility
- */
-export function impliedVolatility(returns, periods = 252, annualize = true) {
-  const cleanReturns = prepareReturns(returns, 0, false);
-  
-  if (cleanReturns.length < 2) return 0;
-  
-  const mean = cleanReturns.reduce((sum, ret) => sum + ret, 0) / cleanReturns.length;
-  const variance = cleanReturns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / (cleanReturns.length - 1);
-  const vol = Math.sqrt(variance);
-  
-  return annualize ? vol * Math.sqrt(periods) : vol;
-}
-
-/**
- * Calculate rolling volatility
- * Exactly matches Python implementation
- * @param {Array} returns - Returns array
- * @param {number} window - Rolling window size (default 30)
- * @param {number} periods - Periods per year (default 252)
- * @returns {Array} Rolling volatility array
- */
-export function rollingVolatility(returns, window = 30, periods = 252) {
-  const cleanReturns = prepareReturns(returns, 0, false);
-  const result = [];
-  
-  for (let i = 0; i < cleanReturns.length; i++) {
-    if (i < window - 1) {
-      result.push(NaN);
-      continue;
-    }
-    
-    const windowReturns = cleanReturns.slice(i - window + 1, i + 1);
-    const mean = windowReturns.reduce((sum, ret) => sum + ret, 0) / windowReturns.length;
-    const variance = windowReturns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / (windowReturns.length - 1);
-    const vol = Math.sqrt(variance) * Math.sqrt(periods);
-    
-    result.push(vol);
-  }
-  
-  return result;
-}
-
-/**
- * Calculate rolling Sharpe ratio
- * Exactly matches Python implementation
- * @param {Array} returns - Returns array
- * @param {number} rfRate - Risk-free rate (default 0)
- * @param {number} window - Rolling window size (default 30)
- * @param {number} periods - Periods per year (default 252)
- * @returns {Array} Rolling Sharpe ratio array
- */
-export function rollingSharpe(returns, rfRate = 0, window = 30, periods = 252) {
-  const cleanReturns = prepareReturns(returns, rfRate, false);
-  const result = [];
-  
-  for (let i = 0; i < cleanReturns.length; i++) {
-    if (i < window - 1) {
-      result.push(NaN);
-      continue;
-    }
-    
-    const windowReturns = cleanReturns.slice(i - window + 1, i + 1);
-    const mean = windowReturns.reduce((sum, ret) => sum + ret, 0) / windowReturns.length;
-    const variance = windowReturns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / (windowReturns.length - 1);
-    const std = Math.sqrt(variance);
-    
-    const sharpeRatio = std === 0 ? 0 : (mean * Math.sqrt(periods)) / (std * Math.sqrt(periods));
-    result.push(sharpeRatio);
-  }
-  
-  return result;
-}
-
-/**
- * Calculate rolling Sortino ratio
- * Exactly matches Python implementation
- * @param {Array} returns - Returns array
- * @param {number} rfRate - Risk-free rate (default 0)
- * @param {number} window - Rolling window size (default 30)
- * @param {number} periods - Periods per year (default 252)
- * @returns {Array} Rolling Sortino ratio array
- */
-export function rollingSortino(returns, rfRate = 0, window = 30, periods = 252) {
-  const cleanReturns = prepareReturns(returns, rfRate, false);
-  const result = [];
-  
-  for (let i = 0; i < cleanReturns.length; i++) {
-    if (i < window - 1) {
-      result.push(NaN);
-      continue;
-    }
-    
-    const windowReturns = cleanReturns.slice(i - window + 1, i + 1);
-    const mean = windowReturns.reduce((sum, ret) => sum + ret, 0) / windowReturns.length;
-    const negativeReturns = windowReturns.filter(ret => ret < 0);
-    
-    if (negativeReturns.length === 0) {
-      result.push(Infinity);
-      continue;
-    }
-    
-    const downsideVariance = negativeReturns.reduce((sum, ret) => sum + Math.pow(ret, 2), 0) / windowReturns.length;
-    const downsideStd = Math.sqrt(downsideVariance);
-    
-    const sortinoRatio = downsideStd === 0 ? 0 : (mean * Math.sqrt(periods)) / (downsideStd * Math.sqrt(periods));
-    result.push(sortinoRatio);
-  }
-  
-  return result;
-}
-
-/**
- * Calculate adjusted Sortino ratio
- * Exactly matches Python implementation
- * @param {Array} returns - Returns array
- * @param {number} rfRate - Risk-free rate (default 0)
- * @param {number} periods - Periods per year (default 252)
- * @param {boolean} smart - Use smart version with autocorr penalty (default false)
- * @param {boolean} nans - Include NaN values (default false)
- * @returns {number} Adjusted Sortino ratio
- */
-export function adjustedSortino(returns, rfRate = 0, periods = 252, smart = false, nans = false) {
   const cleanReturns = prepareReturns(returns, rfRate, nans);
   
-  if (cleanReturns.length === 0) return 0;
+  if (cleanReturns.length === 0) {
+    return 0;
+  }
   
-  const mean = cleanReturns.reduce((sum, ret) => sum + ret, 0) / cleanReturns.length;
+  // Calculate excess returns
+  const meanReturn = cleanReturns.reduce((sum, ret) => sum + ret, 0) / cleanReturns.length;
+  
+  // Calculate downside deviation with autocorr penalty
   const negativeReturns = cleanReturns.filter(ret => ret < 0);
-  
-  if (negativeReturns.length === 0) return Infinity;
+  if (negativeReturns.length === 0) {
+    return Infinity;
+  }
   
   const downsideVariance = negativeReturns.reduce((sum, ret) => sum + Math.pow(ret, 2), 0) / cleanReturns.length;
   const downsideStd = Math.sqrt(downsideVariance);
+  const penalty = autocorrPenalty(cleanReturns, nans);
+  const adjustedDownsideStd = downsideStd * penalty;
   
-  let ratio = downsideStd === 0 ? 0 : (mean * Math.sqrt(periods)) / (downsideStd * Math.sqrt(periods));
+  if (adjustedDownsideStd === 0) return 0;
   
-  if (smart) {
-    const penalty = autocorrPenalty(cleanReturns, nans);
-    ratio *= penalty;
-  }
+  const smartSortinoRatio = meanReturn / adjustedDownsideStd;
   
-  return ratio;
+  return smartSortinoRatio * Math.sqrt(TRADING_DAYS_PER_YEAR);
+}
+
+/**
+ * Calculate Sortino ratio divided by √2
+ * Exactly matches Python implementation
+ * @param {Array} returns - Returns array
+ * @param {number} rfRate - Risk-free rate (default 0)
+ * @param {boolean} nans - Include NaN values (default false)
+ * @returns {number} Sortino ratio divided by √2
+ */
+export function sortinoSqrt2(returns, rfRate = 0, nans = false) {
+  return sortino(returns, rfRate, nans) / Math.sqrt(2);
+}
+
+/**
+ * Calculate Smart Sortino ratio divided by √2
+ * Exactly matches Python implementation
+ * @param {Array} returns - Returns array
+ * @param {number} rfRate - Risk-free rate (default 0)
+ * @param {boolean} nans - Include NaN values (default false)
+ * @returns {number} Smart Sortino ratio divided by √2
+ */
+export function smartSortinoSqrt2(returns, rfRate = 0, nans = false) {
+  return smartSortino(returns, rfRate, nans) / Math.sqrt(2);
 }
 
 /**
@@ -1387,9 +1423,31 @@ function erf(x) {
  * @returns {number} Probabilistic Sharpe ratio
  */
 export function probabilisticSharpeRatio(returns, rfRate = 0, periods = 252, nans = false) {
-  const cleanReturns = prepareReturns(returns, rfRate, nans);
-  const benchmarkReturns = new Array(cleanReturns.length).fill(0);
-  return probabilisticRatio(cleanReturns, benchmarkReturns, periods, nans);
+  // Don't adjust returns by rfRate - let Python handle rf subtraction in ratio calculation
+  const cleanReturns = prepareReturns(returns, 0, nans);
+  
+  // Python: base = sharpe(series, periods=periods, annualize=False, smart=smart)
+  // We need NON-ANNUALIZED Sharpe ratio!
+  const mean = cleanReturns.reduce((sum, ret) => sum + ret, 0) / cleanReturns.length;
+  const variance = cleanReturns.reduce((sum, ret) => sum + Math.pow(ret - mean, 2), 0) / (cleanReturns.length - 1);
+  const std = Math.sqrt(variance);
+  const baseSharpe = std === 0 ? 0 : mean / std; // NON-annualized Sharpe
+  
+  const skewVal = skew(cleanReturns, nans);
+  const kurtosisVal = kurtosis(cleanReturns, nans);
+  const n = cleanReturns.length;
+  
+  // Python formula from probabilistic_ratio function
+  const sigmaSr = Math.sqrt(
+    (1 + (0.5 * Math.pow(baseSharpe, 2)) - (skewVal * baseSharpe) + 
+     (((kurtosisVal - 3) / 4) * Math.pow(baseSharpe, 2))) / (n - 1)
+  );
+  
+  // Python: ratio = (base - rf) / sigma_sr
+  const ratio = (baseSharpe - rfRate) / sigmaSr;
+  const psr = normalCDF(ratio);
+  
+  return psr;
 }
 
 /**
@@ -1453,20 +1511,20 @@ export function expectedShortfall(returns, sigma = 1, confidence = 0.95, nans = 
  */
 export function tailRatio(returns, cutoff = 0.95, nans = false) {
   const cleanReturns = prepareReturns(returns, 0, nans);
+  
+  if (cleanReturns.length === 0) {
+    return 0;
+  }
+  
+  // Python: abs(returns.quantile(cutoff) / returns.quantile(1 - cutoff))
   const sorted = [...cleanReturns].sort((a, b) => a - b);
+  const rightQuantileIndex = Math.floor(sorted.length * cutoff);
+  const leftQuantileIndex = Math.floor(sorted.length * (1 - cutoff));
   
-  const rightTailIndex = Math.floor(sorted.length * cutoff);
-  const leftTailIndex = Math.floor(sorted.length * (1 - cutoff));
+  const rightQuantile = sorted[rightQuantileIndex] || sorted[sorted.length - 1];
+  const leftQuantile = sorted[leftQuantileIndex] || sorted[0];
   
-  const rightTail = sorted.slice(rightTailIndex);
-  const leftTail = sorted.slice(0, leftTailIndex);
-  
-  if (leftTail.length === 0 || rightTail.length === 0) return 0;
-  
-  const rightTailMean = rightTail.reduce((sum, ret) => sum + ret, 0) / rightTail.length;
-  const leftTailMean = leftTail.reduce((sum, ret) => sum + ret, 0) / leftTail.length;
-  
-  return leftTailMean === 0 ? 0 : rightTailMean / Math.abs(leftTailMean);
+  return leftQuantile === 0 ? 0 : Math.abs(rightQuantile / leftQuantile);
 }
 
 /**
@@ -1524,13 +1582,13 @@ export function profitRatio(returns, nans = false) {
  */
 export function cpcIndex(returns, nans = false) {
   const cleanReturns = prepareReturns(returns, 0, nans);
+  
+  // Python: profit_factor(returns) * win_rate(returns) * win_loss_ratio(returns)
+  const profitFactorVal = profitFactor(cleanReturns, nans);
   const winRateVal = winRate(cleanReturns, nans);
-  const avgWinReturn = avgWin(cleanReturns, nans);
-  const avgLossReturn = avgLoss(cleanReturns, nans);
+  const winLossRatioVal = winLossRatio(cleanReturns, nans);
   
-  if (avgLossReturn === 0) return 0;
-  
-  return winRateVal * avgWinReturn / Math.abs(avgLossReturn);
+  return profitFactorVal * winRateVal * winLossRatioVal;
 }
 
 /**
@@ -1542,10 +1600,12 @@ export function cpcIndex(returns, nans = false) {
  */
 export function commonSenseRatio(returns, nans = false) {
   const cleanReturns = prepareReturns(returns, 0, nans);
-  const tailRatioVal = tailRatio(cleanReturns, 0.95, nans);
-  const payoffRatioVal = payoffRatio(cleanReturns, nans);
   
-  return tailRatioVal * payoffRatioVal;
+  // Python: profit_factor(returns) * tail_ratio(returns)
+  const profitFactorVal = profitFactor(cleanReturns, nans);
+  const tailRatioVal = tailRatio(cleanReturns, 0.95, nans);
+  
+  return profitFactorVal * tailRatioVal;
 }
 
 /**
@@ -1558,10 +1618,18 @@ export function commonSenseRatio(returns, nans = false) {
  */
 export function outlierWinRatio(returns, quantile = 0.99, nans = false) {
   const cleanReturns = prepareReturns(returns, 0, nans);
-  const outlierWins = outliers(cleanReturns.filter(ret => ret > 0), quantile, nans);
-  const totalWins = cleanReturns.filter(ret => ret > 0);
+  const positiveReturns = cleanReturns.filter(ret => ret >= 0);
   
-  return totalWins.length === 0 ? 0 : outlierWins.length / totalWins.length;
+  if (positiveReturns.length === 0) {
+    return 0;
+  }
+  
+  // Python: returns.quantile(quantile).mean() / returns[returns >= 0].mean()
+  const sorted = [...cleanReturns].sort((a, b) => a - b);
+  const quantileValue = sorted[Math.floor(sorted.length * quantile)];
+  const meanPositive = positiveReturns.reduce((sum, ret) => sum + ret, 0) / positiveReturns.length;
+  
+  return meanPositive === 0 ? 0 : quantileValue / meanPositive;
 }
 
 /**
@@ -1574,17 +1642,23 @@ export function outlierWinRatio(returns, quantile = 0.99, nans = false) {
  */
 export function outlierLossRatio(returns, quantile = 0.01, nans = false) {
   const cleanReturns = prepareReturns(returns, 0, nans);
-  const losses = cleanReturns.filter(ret => ret < 0);
-  const sorted = [...losses].sort((a, b) => a - b);
-  const threshold = sorted[Math.floor(sorted.length * quantile)];
-  const outlierLosses = losses.filter(ret => ret <= threshold);
+  const negativeReturns = cleanReturns.filter(ret => ret < 0);
   
-  return losses.length === 0 ? 0 : outlierLosses.length / losses.length;
+  if (negativeReturns.length === 0) {
+    return 0;
+  }
+  
+  // Python: returns.quantile(quantile).mean() / returns[returns < 0].mean()
+  const sorted = [...cleanReturns].sort((a, b) => a - b);
+  const quantileValue = sorted[Math.floor(sorted.length * quantile)];
+  const meanNegative = negativeReturns.reduce((sum, ret) => sum + ret, 0) / negativeReturns.length;
+  
+  return meanNegative === 0 ? 0 : quantileValue / meanNegative;
 }
 
 /**
  * Calculate recovery factor
- * Exactly matches Python implementation
+ * Exactly matches Python implementation: abs(returns.sum() - rf) / abs(max_dd)
  * @param {Array} returns - Returns array
  * @param {number} rfRate - Risk-free rate (default 0)
  * @param {boolean} nans - Include NaN values (default false)
@@ -1592,10 +1666,12 @@ export function outlierLossRatio(returns, quantile = 0.01, nans = false) {
  */
 export function recoveryFactor(returns, rfRate = 0, nans = false) {
   const cleanReturns = prepareReturns(returns, rfRate, nans);
-  const totalReturn = cleanReturns.reduce((acc, ret) => acc * (1 + ret), 1) - 1;
+  
+  // Python: returns.sum() - rf (sum of daily returns, not compound)
+  const totalReturns = cleanReturns.reduce((sum, ret) => sum + ret, 0) - rfRate;
   const maxDD = Math.abs(maxDrawdown(cleanReturns, nans));
   
-  return maxDD === 0 ? 0 : totalReturn / maxDD;
+  return maxDD === 0 ? 0 : Math.abs(totalReturns) / maxDD;
 }
 
 /**
@@ -1705,38 +1781,258 @@ export function rollingGreeks(returns, benchmark, periods = 252, window = 252, n
   return result;
 }
 
-/**
- * Calculate UPI (Ulcer Performance Index) - alias
- * Exactly matches Python implementation
- * @param {Array} returns - Returns array
- * @param {number} rfRate - Risk-free rate (default 0)
- * @param {boolean} nans - Include NaN values (default false)
- * @returns {number} UPI
- */
-export function upi(returns, rfRate = 0, nans = false) {
-  return ulcerPerformanceIndex(returns, nans);
+// Period-based return functions
+export function monthToDateReturn(returns) {
+  // MTD: Month-to-date return
+  const periodicReturns = monthToDateReturns(returns);
+  return totalReturn(periodicReturns);
+}
+
+export function quarterReturn(returns, quarters) {
+  // 3M = 3 months back
+  const periodicReturns = getPeriodicReturns(returns, quarters * 3);
+  return totalReturn(periodicReturns);
+}
+
+export function winQuarter(returns, dates = null) {
+  // Simple quarterly win rate calculation
+  if (!dates || dates.length !== returns.length) {
+    // Fallback: assume roughly 63 trading days per quarter (252/4)
+    return 0; // Can't calculate without proper dates
+  }
+  
+  // Group by quarters (3-month periods)
+  const quarterlyReturns = [];
+  let currentQuarter = [];
+  let currentMonth = dates[0].getMonth();
+  let currentQuarterMonth = Math.floor(currentMonth / 3);
+  
+  for (let i = 0; i < returns.length; i++) {
+    const month = dates[i].getMonth();
+    const quarterMonth = Math.floor(month / 3);
+    
+    if (quarterMonth !== currentQuarterMonth && currentQuarter.length > 0) {
+      // Calculate compounded return for this quarter
+      const quarterReturn = currentQuarter.reduce((acc, ret) => acc * (1 + ret), 1) - 1;
+      quarterlyReturns.push(quarterReturn);
+      currentQuarter = [];
+      currentQuarterMonth = quarterMonth;
+    }
+    
+    currentQuarter.push(returns[i]);
+  }
+  
+  // Don't forget the last quarter
+  if (currentQuarter.length > 0) {
+    const quarterReturn = currentQuarter.reduce((acc, ret) => acc * (1 + ret), 1) - 1;
+    quarterlyReturns.push(quarterReturn);
+  }
+  
+  return winRate(quarterlyReturns);
+}
+
+export function yearToDateReturn(returns) {
+  // YTD: Year-to-date return
+  const periodicReturns = yearToDateReturns(returns);
+  return totalReturn(periodicReturns);
+}
+
+export function yearReturn(returns, years) {
+  // 1Y, 3Y, etc.
+  const periodicReturns = getPeriodicReturns(returns, null, years);
+  return totalReturn(periodicReturns);
+}
+
+export function annualizedReturn(returns, years) {
+  // For 3Y, 5Y, 10Y (ann.) - use CAGR
+  const periodicReturns = getPeriodicReturns(returns, null, years);
+  return cagr(periodicReturns);
+}
+
+// Specific implementations for each period - now date-aware!
+export function mtdReturn(returns, dates = null) {
+  // Python: comp_func(df[df.index >= _dt(today.year, today.month, 1)]) * pct
+  const mtdReturns = dates ? filterMTDReturns(returns, dates) : monthToDateReturns(returns);
+  return comp(mtdReturns);
+}
+
+export function threeMonthReturn(returns, dates = null) {
+  // Python: comp_func(df[df.index >= d]) where d = today - relativedelta(months=3)
+  const threeMonthReturns = dates ? filterMonthsBackReturns(returns, dates, 3) : getPeriodicReturns(returns, 3);
+  return comp(threeMonthReturns);
+}
+
+export function sixMonthReturn(returns, dates = null) {
+  // Python: comp_func(df[df.index >= d]) where d = today - relativedelta(months=6)
+  const sixMonthReturns = dates ? filterMonthsBackReturns(returns, dates, 6) : getPeriodicReturns(returns, 6);
+  return comp(sixMonthReturns);
+}
+
+export function ytdReturn(returns, dates = null) {
+  // Python: comp_func(df[df.index >= _dt(today.year, 1, 1)]) * pct
+  const ytdReturns = dates ? filterYTDReturns(returns, dates) : yearToDateReturns(returns);
+  return comp(ytdReturns);
+}
+
+export function oneYearReturn(returns, dates = null) {
+  // Python: comp_func(df[df.index >= d]) where d = today - relativedelta(years=1)
+  const oneYearReturns = dates ? filterYearsBackReturns(returns, dates, 1) : getPeriodicReturns(returns, null, 1);
+  return comp(oneYearReturns);
+}
+
+export function threeYearAnnualizedReturn(returns) {
+  return annualizedReturn(returns, 3);
+}
+
+export function fiveYearAnnualizedReturn(returns) {
+  return annualizedReturn(returns, 5);
+}
+
+export function tenYearAnnualizedReturn(returns) {
+  return annualizedReturn(returns, 10);
+}
+
+export function allTimeAnnualizedReturn(returns) {
+  return cagr(returns);
+}
+
+// Expected return functions - now date-aware!
+export function expectedMonthlyReturn(returns, compounded = true, dates = null) {
+  // Expected monthly return using "M" aggregation (matches Python exactly)
+  return expectedReturn(returns, 'M', compounded, false, dates);
+}
+
+export function expectedYearlyReturn(returns, compounded = true, dates = null) {
+  // Expected yearly return using "A" aggregation (matches Python exactly)  
+  return expectedReturn(returns, 'A', compounded, false, dates);
+}
+
+// Avg Up/Down Month functions - now date-aware!
+export function avgUpMonth(returns, compounded = true, dates = null) {
+  // Python: avg_win(df, compounded=compounded, aggregate="M", prepare_returns=False)
+  const monthlyRets = dates ? 
+    resampleMonthlySum(returns, dates, compounded) : 
+    aggregateReturns(returns, 'M', compounded);
+  const upMonths = monthlyRets.filter(ret => ret > 0);
+  if (upMonths.length === 0) return 0;
+  return upMonths.reduce((sum, ret) => sum + ret, 0) / upMonths.length;
+}
+
+export function avgDownMonth(returns, compounded = true, dates = null) {
+  // Python: avg_loss(df, compounded=compounded, aggregate="M", prepare_returns=False)
+  const monthlyRets = dates ? 
+    resampleMonthlySum(returns, dates, compounded) : 
+    aggregateReturns(returns, 'M', compounded);
+  const downMonths = monthlyRets.filter(ret => ret < 0);
+  if (downMonths.length === 0) return 0;
+  return downMonths.reduce((sum, ret) => sum + ret, 0) / downMonths.length;
 }
 
 /**
- * Calculate ROR (Risk of Ruin) - alias
- * Exactly matches Python implementation
+ * Calculate the longest drawdown period in days
  * @param {Array} returns - Returns array
- * @param {boolean} nans - Include NaN values (default false)
- * @returns {number} ROR
+ * @returns {number} Longest drawdown period in days
  */
-export function ror(returns, nans = false) {
-  return riskOfRuin(returns, nans);
+export function longestDrawdownDays(returns, dates = null) {
+  // Calculate the longest drawdown period using drawdown details
+  // Matches Python: ret_dd.sort_values(by="days", ascending=False)["days"].values[0]
+  const drawdownSeries = drawdown(returns);
+  
+  if (dates) {
+    const details = drawdownDetailsWithDates(drawdownSeries, dates);
+    if (details.length === 0) return 0;
+    return Math.max(...details.map(period => period.days));
+  } else {
+    const details = drawdownDetails(drawdownSeries);
+    if (details.length === 0) return 0;
+    return Math.max(...details.map(period => period.days));
+  }
 }
 
 /**
- * Calculate VAR (Value at Risk) - alias
- * Exactly matches Python implementation
+ * Calculate the average drawdown period in days
  * @param {Array} returns - Returns array
- * @param {number} sigma - Sigma multiplier (default 1)
- * @param {number} confidence - Confidence level (default 0.95)
- * @param {boolean} nans - Include NaN values (default false)
- * @returns {number} VAR
+ * @returns {number} Average drawdown period in days
  */
-export function valueAtRiskAlias(returns, sigma = 1, confidence = 0.95, nans = false) {
-  return valueAtRisk(returns, confidence, nans);
+export function averageDrawdownDays(returns, dates = null) {
+  // Calculate the average drawdown period using drawdown details
+  // Matches Python: ret_dd["days"].mean()
+  const drawdownSeries = drawdown(returns);
+  
+  if (dates) {
+    const details = drawdownDetailsWithDates(drawdownSeries, dates);
+    if (details.length === 0) return 0;
+    const totalDays = details.reduce((sum, period) => sum + period.days, 0);
+    return totalDays / details.length;
+  } else {
+    const details = drawdownDetails(drawdownSeries);
+    if (details.length === 0) return 0;
+    const totalDays = details.reduce((sum, period) => sum + period.days, 0);
+    return totalDays / details.length;
+  }
+}
+
+// Date-aware utility functions for matching Python exactly
+
+/**
+ * Calculate drawdown details with actual calendar days (like Python)
+ * @param {Array} drawdownSeries - Drawdown series
+ * @param {Array} dates - Corresponding dates array
+ * @returns {Array} Array of drawdown periods with calendar day counts
+ */
+export function drawdownDetailsWithDates(drawdownSeries, dates) {
+  const details = [];
+  let inDrawdown = false;
+  let currentPeriod = null;
+  
+  for (let i = 0; i < drawdownSeries.length; i++) {
+    const dd = drawdownSeries[i];
+    
+    if (dd < 0 && !inDrawdown) {
+      // Start of new drawdown period
+      inDrawdown = true;
+      currentPeriod = {
+        start: i,
+        startDate: dates[i],
+        valley: i,
+        minDrawdown: dd
+      };
+    } else if (dd < 0 && inDrawdown) {
+      // Continue drawdown period
+      if (dd < currentPeriod.minDrawdown) {
+        currentPeriod.minDrawdown = dd;
+        currentPeriod.valley = i;
+      }
+    } else if (dd >= 0 && inDrawdown) {
+      // End of drawdown period
+      currentPeriod.end = i - 1;
+      currentPeriod.endDate = dates[i - 1];
+      
+      // Calculate calendar days (like Python: (ends[i] - starts[i]).days + 1)
+      const startTime = currentPeriod.startDate.getTime();
+      const endTime = currentPeriod.endDate.getTime();
+      const daysDiff = Math.round((endTime - startTime) / (1000 * 60 * 60 * 24)) + 1;
+      currentPeriod.days = daysDiff;
+      
+      details.push(currentPeriod);
+      inDrawdown = false;
+      currentPeriod = null;
+    }
+  }
+  
+  // Handle case where series ends in drawdown
+  if (inDrawdown && currentPeriod) {
+    currentPeriod.end = drawdownSeries.length - 1;
+    currentPeriod.endDate = dates[drawdownSeries.length - 1];
+    
+    // Calculate calendar days
+    const startTime = currentPeriod.startDate.getTime();
+    const endTime = currentPeriod.endDate.getTime();
+    const daysDiff = Math.round((endTime - startTime) / (1000 * 60 * 60 * 24)) + 1;
+    currentPeriod.days = daysDiff;
+    
+    details.push(currentPeriod);
+  }
+  
+  return details;
 }

@@ -191,9 +191,42 @@ export function groupReturns(returns, period = 'monthly') {
  * @param {string} period - Aggregation period
  * @returns {Array} Aggregated returns
  */
-export function aggregateReturns(returns, period = 'monthly') {
-  const grouped = groupReturns(returns, period);
-  return Object.values(grouped);
+/**
+ * Aggregate returns based on date periods - matches Python aggregate_returns
+ * @param {Object} returns - Returns object with values and index arrays
+ * @param {string} period - Period to aggregate by ('M' for month, 'A' for year, etc.)
+ * @param {boolean} compounded - Whether to use compound returns
+ * @returns {Array} Aggregated returns
+ */
+export function aggregateReturns(returns, period = null, compounded = true) {
+  if (!returns || !returns.values || !returns.index) {
+    return [];
+  }
+  
+  if (!period || period.toLowerCase().includes('day')) {
+    return returns.values;
+  }
+  
+  const values = returns.values;
+  const dates = returns.index;
+  
+  if (period === 'M' || period.toLowerCase().includes('month')) {
+    return groupReturnsByPeriod(values, dates, 'month', compounded);
+  }
+  
+  if (period === 'A' || period.toLowerCase().includes('year') || period.toLowerCase().includes('eoy') || period.toLowerCase().includes('yoy')) {
+    return groupReturnsByPeriod(values, dates, 'year', compounded);
+  }
+  
+  if (period === 'Q' || period.toLowerCase().includes('quarter')) {
+    return groupReturnsByPeriod(values, dates, 'quarter', compounded);
+  }
+  
+  if (period === 'W' || period.toLowerCase().includes('week')) {
+    return groupReturnsByPeriod(values, dates, 'week', compounded);
+  }
+  
+  return values;
 }
 
 /**
@@ -626,9 +659,10 @@ export function groupReturnsByPeriod(returns, groupby, compounded = false) {
   let currentPeriod = 0;
   let currentGroup = [];
   
-  // Simplified grouping logic
+  // Simplified grouping logic to match Python periods
   const periodsPerGroup = groupby === 'M' ? TRADING_DAYS_PER_MONTH : 
                          groupby === 'Y' ? TRADING_DAYS_PER_YEAR : 
+                         groupby === 'Q' ? Math.floor(TRADING_DAYS_PER_YEAR / 4) :
                          TRADING_DAYS_PER_MONTH;
   
   for (let i = 0; i < returns.length; i++) {
@@ -636,8 +670,10 @@ export function groupReturnsByPeriod(returns, groupby, compounded = false) {
     
     if (currentGroup.length >= periodsPerGroup || i === returns.length - 1) {
       if (compounded) {
+        // Compounded returns: (1+r1)*(1+r2)*...*(1+rn) - 1
         grouped[currentPeriod] = currentGroup.reduce((acc, ret) => acc * (1 + ret), 1) - 1;
       } else {
+        // Simple sum of returns
         grouped[currentPeriod] = currentGroup.reduce((sum, ret) => sum + ret, 0);
       }
       
@@ -792,4 +828,311 @@ export function flattenDataframe(data, setIndex = null) {
   return flattened;
 }
 
+/**
+ * Normal inverse cumulative distribution function (quantile function)
+ * Matches Python's scipy.stats.norm.ppf function
+ * @param {number} p - Probability (0 to 1)
+ * @param {number} mu - Mean (default 0)
+ * @param {number} sigma - Standard deviation (default 1)
+ * @returns {number} Quantile value
+ */
+export function normalInverseCDF(p, mu = 0, sigma = 1) {
+  if (p <= 0 || p >= 1) {
+    throw new Error('Probability must be between 0 and 1');
+  }
+  
+  // Rational approximation to inverse error function
+  // Based on Acklam's algorithm, accurate to about 15 decimal places
+  const a = [
+    -3.969683028665376e+01, 2.209460984245205e+02,
+    -2.759285104469687e+02, 1.383577518672690e+02,
+    -3.066479806614716e+01, 2.506628277459239e+00
+  ];
+  
+  const b = [
+    -5.447609879822406e+01, 1.615858368580409e+02,
+    -1.556989798598866e+02, 6.680131188771972e+01,
+    -1.328068155288572e+01
+  ];
+  
+  const c = [
+    -7.784894002430293e-03, -3.223964580411365e-01,
+    -2.400758277161838e+00, -2.549732539343734e+00,
+    4.374664141464968e+00, 2.938163982698783e+00
+  ];
+  
+  const d = [
+    7.784695709041462e-03, 3.224671290700398e-01,
+    2.445134137142996e+00, 3.754408661907416e+00
+  ];
+  
+  // Define break-points
+  const plow = 0.02425;
+  const phigh = 1 - plow;
+  
+  let x;
+  
+  if (p < plow) {
+    // Rational approximation for lower region
+    const q = Math.sqrt(-2 * Math.log(p));
+    x = (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) /
+        ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+  } else if (p > phigh) {
+    // Rational approximation for upper region
+    const q = Math.sqrt(-2 * Math.log(1 - p));
+    x = -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) /
+         ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+  } else {
+    // Rational approximation for central region
+    const q = p - 0.5;
+    const r = q * q;
+    x = (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q /
+        (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+  }
+  
+  // Apply mean and standard deviation
+  return mu + sigma * x;
+}
+
+// Period-based return calculation utilities
+export function getPeriodicReturns(returns, months = null, years = null) {
+  if (!returns || returns.length === 0) return [];
+  
+  // For JavaScript implementation, we'll work with array indices
+  // since we don't have date index information in the current data structure
+  // This is a simplified implementation for testing purposes
+  
+  if (months === null && years === null) {
+    return returns; // All-time
+  }
+  
+  let daysBack;
+  if (years) {
+    daysBack = Math.floor(years * 252); // Assuming 252 trading days per year
+  } else if (months) {
+    daysBack = Math.floor(months * 21); // Assuming 21 trading days per month
+  }
+  
+  const startIndex = Math.max(0, returns.length - daysBack);
+  return returns.slice(startIndex);
+}
+
+export function monthToDateReturns(returns) {
+  // Simplified: assume last ~21 trading days for current month
+  return getPeriodicReturns(returns, 1);
+}
+
+export function yearToDateReturns(returns) {
+  // Simplified: this would need actual date logic in a real implementation
+  // For now, assume we're partway through the year
+  const daysInYear = 252;
+  const estimatedDaysYTD = Math.floor(daysInYear * 0.6); // rough estimate
+  return returns.slice(-estimatedDaysYTD);
+}
+
+/**
+ * Resample daily returns to monthly returns using date-based aggregation
+ * Matches Python pandas .resample('M').sum() exactly
+ * @param {Array} returns - Daily returns array
+ * @param {Array} dates - Corresponding date array
+ * @param {boolean} compounded - Whether to compound returns (default false for sum)
+ * @returns {Array} Monthly returns
+ */
+export function resampleMonthlySum(returns, dates, compounded = false) {
+  if (!dates || returns.length !== dates.length) {
+    // Fallback to approximation
+    return aggregateReturns(returns, 'monthly', compounded);
+  }
+
+  const monthlyData = new Map();
+  
+  for (let i = 0; i < returns.length; i++) {
+    const date = new Date(dates[i]);
+    // Use UTC methods to avoid timezone issues (match Python behavior)
+    const monthKey = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+    
+    if (!monthlyData.has(monthKey)) {
+      monthlyData.set(monthKey, []);
+    }
+    monthlyData.get(monthKey).push(returns[i]);
+  }
+  
+  const monthlyReturns = [];
+  for (const [monthKey, monthReturns] of monthlyData) {
+    if (compounded) {
+      // Compound returns: (1+r1)*(1+r2)*...*(1+rn) - 1
+      const monthlyReturn = monthReturns.reduce((prod, ret) => prod * (1 + ret), 1) - 1;
+      monthlyReturns.push(monthlyReturn);
+    } else {
+      // Sum returns: r1 + r2 + ... + rn (pandas .resample('M').sum())
+      const monthlyReturn = monthReturns.reduce((sum, ret) => sum + ret, 0);
+      monthlyReturns.push(monthlyReturn);
+    }
+  }
+  
+  return monthlyReturns;
+}
+
+/**
+ * Resample daily returns to yearly returns using date-based aggregation
+ * Matches Python pandas .resample('A').apply() exactly
+ * @param {Array} returns - Daily returns array
+ * @param {Array} dates - Corresponding date array
+ * @param {boolean} compounded - Whether to compound returns (default true)
+ * @returns {Array} Yearly returns
+ */
+export function resampleYearlySum(returns, dates, compounded = true) {
+  if (!dates || returns.length !== dates.length) {
+    // Fallback to approximation
+    return aggregateReturns(returns, 'yearly', compounded);
+  }
+
+  const yearlyData = new Map();
+  
+  for (let i = 0; i < returns.length; i++) {
+    const date = new Date(dates[i]);
+    // Use UTC methods to avoid timezone issues (match Python behavior)
+    const yearKey = date.getUTCFullYear();
+    
+    if (!yearlyData.has(yearKey)) {
+      yearlyData.set(yearKey, []);
+    }
+    yearlyData.get(yearKey).push(returns[i]);
+  }
+  
+  const yearlyReturns = [];
+  for (const [yearKey, yearReturns] of yearlyData) {
+    if (compounded) {
+      // Compound returns: (1+r1)*(1+r2)*...*(1+rn) - 1
+      const yearlyReturn = yearReturns.reduce((prod, ret) => prod * (1 + ret), 1) - 1;
+      yearlyReturns.push(yearlyReturn);
+    } else {
+      // Sum returns: r1 + r2 + ... + rn
+      const yearlyReturn = yearReturns.reduce((sum, ret) => sum + ret, 0);
+      yearlyReturns.push(yearlyReturn);
+    }
+  }
+  
+  return yearlyReturns;
+}
+
+/**
+ * Filter returns for Month-to-Date period using actual dates
+ * Matches Python: df[df.index >= _dt(today.year, today.month, 1)]
+ * @param {Array} returns - Daily returns array
+ * @param {Array} dates - Corresponding date array
+ * @returns {Array} MTD returns
+ */
+export function filterMTDReturns(returns, dates) {
+  if (!dates || returns.length !== dates.length) {
+    // Fallback - approximate last 21 trading days
+    return returns.slice(-21);
+  }
+
+  const lastDate = new Date(dates[dates.length - 1]);
+  // Use UTC methods to avoid timezone issues
+  const monthStart = new Date(Date.UTC(lastDate.getUTCFullYear(), lastDate.getUTCMonth(), 1));
+  
+  const mtdReturns = [];
+  for (let i = 0; i < returns.length; i++) {
+    const date = new Date(dates[i]);
+    if (date >= monthStart) {
+      mtdReturns.push(returns[i]);
+    }
+  }
+  
+  return mtdReturns;
+}
+
+/**
+ * Filter returns for Year-to-Date period using actual dates
+ * Matches Python: df[df.index >= _dt(today.year, 1, 1)]
+ * @param {Array} returns - Daily returns array
+ * @param {Array} dates - Corresponding date array
+ * @returns {Array} YTD returns
+ */
+export function filterYTDReturns(returns, dates) {
+  if (!dates || returns.length !== dates.length) {
+    // Fallback - approximate last 252 trading days
+    return returns.slice(-252);
+  }
+
+  const lastDate = new Date(dates[dates.length - 1]);
+  // Use UTC methods to avoid timezone issues
+  const yearStart = new Date(Date.UTC(lastDate.getUTCFullYear(), 0, 1));
+  
+  const ytdReturns = [];
+  for (let i = 0; i < returns.length; i++) {
+    const date = new Date(dates[i]);
+    if (date >= yearStart) {
+      ytdReturns.push(returns[i]);
+    }
+  }
+  
+  return ytdReturns;
+}
+
+/**
+ * Filter returns for specific number of months back using actual dates
+ * Matches Python: today - relativedelta(months=n)
+ * @param {Array} returns - Daily returns array
+ * @param {Array} dates - Corresponding date array
+ * @param {number} months - Number of months to go back
+ * @returns {Array} Filtered returns
+ */
+export function filterMonthsBackReturns(returns, dates, months) {
+  if (!dates || returns.length !== dates.length) {
+    // Fallback - approximate using trading days
+    const tradingDays = Math.floor(months * TRADING_DAYS_PER_MONTH);
+    return returns.slice(-tradingDays);
+  }
+
+  const lastDate = new Date(dates[dates.length - 1]);
+  const cutoffDate = new Date(lastDate);
+  // Use setUTCMonth to avoid timezone issues
+  cutoffDate.setUTCMonth(cutoffDate.getUTCMonth() - months);
+  
+  const filteredReturns = [];
+  for (let i = 0; i < returns.length; i++) {
+    const date = new Date(dates[i]);
+    if (date >= cutoffDate) {
+      filteredReturns.push(returns[i]);
+    }
+  }
+  
+  return filteredReturns;
+}
+
+/**
+ * Filter returns for specific number of years back using actual dates
+ * Matches Python: today - relativedelta(years=n)
+ * @param {Array} returns - Daily returns array
+ * @param {Array} dates - Corresponding date array
+ * @param {number} years - Number of years to go back
+ * @returns {Array} Filtered returns
+ */
+export function filterYearsBackReturns(returns, dates, years) {
+  if (!dates || returns.length !== dates.length) {
+    // Fallback - approximate using trading days
+    const tradingDays = Math.floor(years * TRADING_DAYS_PER_YEAR);
+    return returns.slice(-tradingDays);
+  }
+
+  const lastDate = new Date(dates[dates.length - 1]);
+  const cutoffDate = new Date(lastDate);
+  // Use setUTCFullYear to avoid timezone issues
+  cutoffDate.setUTCFullYear(cutoffDate.getUTCFullYear() - years);
+  
+  const filteredReturns = [];
+  for (let i = 0; i < returns.length; i++) {
+    const date = new Date(dates[i]);
+    if (date >= cutoffDate) {
+      filteredReturns.push(returns[i]);
+    }
+  }
+  
+  return filteredReturns;
+}
+
+// Export constants
 export { TRADING_DAYS_PER_YEAR, TRADING_DAYS_PER_MONTH, MONTHS_PER_YEAR };

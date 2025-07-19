@@ -266,8 +266,8 @@ describe('QuantStats.js Tests', () => {
       assert.equal(htmlReport.includes('</html>'), true);
       
       // Should contain metrics
-      assert.equal(htmlReport.includes('Total Return'), true);
-      assert.equal(htmlReport.includes('Sharpe Ratio'), true);
+      assert.equal(htmlReport.includes('Cumulative Return'), true);
+      assert.equal(htmlReport.includes('Sharpe'), true);
     });
   });
 

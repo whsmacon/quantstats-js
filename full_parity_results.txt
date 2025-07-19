@@ -1,0 +1,98 @@
+=== COMPREHENSIVE PARITY TEST: JavaScript vs Python QuantStats ===
+
+Strategy: Copy of NOVA | Just (front)run this | Overcompensating Frontrunner | WHS 60d | WEF Drawdowns | Anansi no leverage block | v1 Mark 
+Strategy SID: WFPLs3ulQOZK9c2FyumJ
+Data points: 511
+First few returns: -0.900050, -0.008364, -0.037452, 0.077000, 0.022267
+Last few returns: -0.009825, 0.013456, -0.008384, 0.061200, 0.178374
+
+=== COMPREHENSIVE METRICS COMPARISON ===
+Metric                              |   JavaScript |       Python | Difference | Status
+-----------------------------------------------------------------------------------------------
+Total Return                        | JS:     0.541858 | Python:     0.541900 | Diff:   0.000042 | ✅ MATCH
+CAGR                                | JS:     0.238039 | Python:     0.237400 | Diff:   0.000639 | ❌ DIFF
+Volatility                          | JS:     0.709606 | Python:     0.709600 | Diff:   0.000006 | ✅ MATCH
+Sharpe Ratio                        | JS:     1.348537 | Python:     1.350000 | Diff:   0.001463 | ❌ DIFF
+Sortino Ratio                       | JS:     1.483652 | Python:     1.490000 | Diff:   0.006348 | ❌ DIFF
+Calmar Ratio                        | JS:     3.027350 | Python:     3.020000 | Diff:   0.007350 | ❌ DIFF
+Omega Ratio                         | JS:     1.785713 | Python:     1.790000 | Diff:   0.004287 | ❌ DIFF
+Max Drawdown                        | JS:    -0.078629 | Python:    -0.078600 | Diff:   0.000029 | ✅ MATCH
+Avg Drawdown                        | JS:    -0.017923 | Python:    -0.020900 | Diff:   0.002977 | ❌ DIFF
+Recovery Factor                     | JS:     6.891292 | Python:    24.680000 | Diff:  17.788708 | ❌ DIFF
+Ulcer Index                         | JS:     2.631351 | Python:     0.030000 | Diff:   2.601351 | ❌ DIFF
+Serenity Index                      | JS:     0.090463 | Python:    66.340000 | Diff:  66.249537 | ❌ DIFF
+Skewness                            | JS:   -16.007541 | Python:   -16.050000 | Diff:   0.042459 | ❌ DIFF
+Kurtosis                            | JS:   327.968334 | Python:   329.270000 | Diff:   1.301666 | ❌ DIFF
+VaR (95%)                           | JS:    -0.069657 | Python:    -0.069700 | Diff:   0.000043 | ✅ MATCH
+CVaR (95%)                          | JS:    -0.069657 | Python:    -0.069700 | Diff:   0.000043 | ✅ MATCH
+Kelly Criterion                     | JS:     0.297620 | Python:     0.297600 | Diff:   0.000020 | ✅ MATCH
+Profit Factor                       | JS:     1.785713 | Python:     1.790000 | Diff:   0.004287 | ❌ DIFF
+Payoff Ratio                        | JS:     0.854276 | Python:     0.850000 | Diff:   0.004276 | ❌ DIFF
+Win Rate                            | JS:     0.676409 | Python:     0.676400 | Diff:   0.000009 | ✅ MATCH
+Max Consecutive Wins                | JS:    16.000000 | Python:    16.000000 | Diff:   0.000000 | ✅ MATCH
+Max Consecutive Losses              | JS:     5.000000 | Python:     5.000000 | Diff:   0.000000 | ✅ MATCH
+Best Day                            | JS:     0.178374 | Python:     0.178400 | Diff:   0.000026 | ✅ MATCH
+Worst Day                           | JS:    -0.900050 | Python:    -0.900000 | Diff:   0.000050 | ✅ MATCH
+Gain/Pain Ratio                     | JS:     1.785713 | Python:     0.790000 | Diff:   0.995713 | ❌ DIFF
+Tail Ratio                          | JS:     0.953514 | Python:     2.190000 | Diff:   1.236486 | ❌ DIFF
+Outlier Win Ratio                   | JS:     0.009259 | Python:     5.180000 | Diff:   5.170741 | ❌ DIFF
+Outlier Loss Ratio                  | JS:     0.012903 | Python:     2.320000 | Diff:   2.307097 | ❌ DIFF
+CPC Index                           | JS:     0.577840 | Python:     1.030000 | Diff:   0.452160 | ❌ DIFF
+Common Sense Ratio                  | JS:     0.814564 | Python:     3.910000 | Diff:   3.095436 | ❌ DIFF
+Risk of Ruin                        | JS:     1.313755 | Python:     0.000000 | Diff:   1.313755 | ❌ DIFF
+Expected Daily                      | JS:     0.003797 | Python:     0.000800 | Diff:   0.002997 | ❌ DIFF
+Smart Sharpe                        | JS:     1.332822 | Python:     1.280000 | Diff:   0.052822 | ❌ DIFF
+Smart Sortino                       | JS:     1.466363 | Python:     1.410000 | Diff:   0.056363 | ❌ DIFF
+Prob. Sharpe Ratio                  | JS:     0.972473 | Python:     0.867700 | Diff:   0.104773 | ❌ DIFF
+Win Month                           | JS:     0.920000 | Python:     0.923100 | Diff:   0.003100 | ❌ DIFF
+Win Year                            | JS:     0.666667 | Python:     0.666700 | Diff:   0.000033 | ✅ MATCH
+Best Month                          | JS:     0.346598 | Python:     0.289800 | Diff:   0.056798 | ❌ DIFF
+Worst Month                         | JS:    -0.887216 | Python:    -0.891400 | Diff:   0.004184 | ❌ DIFF
+Best Year                           | JS:     2.454155 | Python:     3.680400 | Diff:   1.226245 | ❌ DIFF
+Worst Year                          | JS:    -0.630315 | Python:    -0.871100 | Diff:   0.240785 | ❌ DIFF
+Time in Market                      | JS:     0.940000 | Python:     0.940000 | Diff:   0.000000 | ✅ MATCH
+-----------------------------------------------------------------------------------------------
+COMPREHENSIVE PARITY SCORE: 13/42 (31.0%)
+❌ LOW PARITY - Major calculation issues detected
+\n=== SUMMARY BY CATEGORY ===
+Basic Returns       : 2/3 (66.7%)
+Risk-Adjusted       : 0/6 (0.0%)
+Probabilistic       : 0/1 (0.0%)
+Advanced Ratios     : 0/0 (0.0%)
+Drawdown            : 1/5 (20.0%)
+Distribution        : 0/2 (0.0%)
+Risk                : 2/2 (100.0%)
+Performance         : 2/4 (50.0%)
+Win/Loss            : 1/2 (50.0%)
+Time Periods        : 1/5 (20.0%)
+Other               : 4/12 (33.3%)
+\n=== FAILED METRICS (for debugging) ===
+CAGR                     : 0.27% error (JS: 0.238039, Python: 0.237400)
+Sharpe Ratio             : 0.11% error (JS: 1.348537, Python: 1.350000)
+Sortino Ratio            : 0.43% error (JS: 1.483652, Python: 1.490000)
+Calmar Ratio             : 0.24% error (JS: 3.027350, Python: 3.020000)
+Omega Ratio              : 0.24% error (JS: 1.785713, Python: 1.790000)
+Avg Drawdown             : 14.24% error (JS: -0.017923, Python: -0.020900)
+Recovery Factor          : 72.08% error (JS: 6.891292, Python: 24.680000)
+Ulcer Index              : 8671.17% error (JS: 2.631351, Python: 0.030000)
+Serenity Index           : 99.86% error (JS: 0.090463, Python: 66.340000)
+Skewness                 : 0.26% error (JS: -16.007541, Python: -16.050000)
+Kurtosis                 : 0.40% error (JS: 327.968334, Python: 329.270000)
+Profit Factor            : 0.24% error (JS: 1.785713, Python: 1.790000)
+Payoff Ratio             : 0.50% error (JS: 0.854276, Python: 0.850000)
+Gain/Pain Ratio          : 126.04% error (JS: 1.785713, Python: 0.790000)
+Tail Ratio               : 56.46% error (JS: 0.953514, Python: 2.190000)
+Outlier Win Ratio        : 99.82% error (JS: 0.009259, Python: 5.180000)
+Outlier Loss Ratio       : 99.44% error (JS: 0.012903, Python: 2.320000)
+CPC Index                : 43.90% error (JS: 0.577840, Python: 1.030000)
+Common Sense Ratio       : 79.17% error (JS: 0.814564, Python: 3.910000)
+Risk of Ruin             : Infinity% error (JS: 1.313755, Python: 0.000000)
+Expected Daily           : 374.67% error (JS: 0.003797, Python: 0.000800)
+Smart Sharpe             : 4.13% error (JS: 1.332822, Python: 1.280000)
+Smart Sortino            : 4.00% error (JS: 1.466363, Python: 1.410000)
+Prob. Sharpe Ratio       : 12.07% error (JS: 0.972473, Python: 0.867700)
+Win Month                : 0.34% error (JS: 0.920000, Python: 0.923100)
+Best Month               : 19.60% error (JS: 0.346598, Python: 0.289800)
+Worst Month              : 0.47% error (JS: -0.887216, Python: -0.891400)
+Best Year                : 33.32% error (JS: 2.454155, Python: 3.680400)
+Worst Year               : 27.64% error (JS: -0.630315, Python: -0.871100)
