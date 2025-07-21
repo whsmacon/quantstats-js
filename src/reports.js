@@ -357,6 +357,22 @@ function generateEOYReturnsChart(returns, dates, title = 'EOY Returns') {
   // Calculate yearly returns using existing stats function
   const yearlyReturns = stats.yearlyReturns(returnsData, false, datesData, true);
   
+  // Extract years for labeling
+  const years = [];
+  if (datesData && datesData.length > 0) {
+    const yearlyData = new Map();
+    for (let i = 0; i < returnsData.length; i++) {
+      const date = new Date(datesData[i]);
+      const yearKey = date.getUTCFullYear();
+      if (!yearlyData.has(yearKey)) {
+        yearlyData.set(yearKey, []);
+        years.push(yearKey);
+      }
+      yearlyData.get(yearKey).push(returnsData[i]);
+    }
+    years.sort((a, b) => a - b);
+  }
+  
   if (!yearlyReturns || yearlyReturns.length === 0) {
     return `<svg width="576" height="360" viewBox="0 0 576 360">
       <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
@@ -385,6 +401,12 @@ function generateEOYReturnsChart(returns, dates, title = 'EOY Returns') {
     return `<rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" fill="${color}"/>`;
   }).join('');
   
+  // Generate year labels
+  const yearLabels = years.map((year, index) => {
+    const x = margin.left + index * (barWidth + barSpacing) + barWidth / 2;
+    return `<text x="${x}" y="${height - 15}" text-anchor="middle" font-size="11" fill="#555">${year}</text>`;
+  }).join('');
+  
   // Zero line
   const zeroY = margin.top + (maxValue / valueRange) * chartHeight;
   
@@ -405,6 +427,9 @@ function generateEOYReturnsChart(returns, dates, title = 'EOY Returns') {
     
     <!-- Title -->
     <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    
+    <!-- Year labels -->
+    ${yearLabels}
     
     <!-- Y-axis labels -->
     <text x="15" y="${margin.top + 10}" font-size="11" fill="#666">${(maxValue * 100).toFixed(0)}%</text>
@@ -460,6 +485,38 @@ function generateMonthlyDistChart(returns, dates, title = 'Monthly Distribution'
     return `<rect x="${x}" y="${y}" width="${barWidth - 1}" height="${barHeight}" fill="#1f77b4" opacity="0.7"/>`;
   }).join('');
   
+  // Generate Y-axis labels (frequency counts)
+  const yTicks = [];
+  const tickCount = 5;
+  for (let i = 0; i <= tickCount; i++) {
+    const tickValue = Math.round((maxCount * i) / tickCount);
+    const y = margin.top + chartHeight - (i / tickCount) * chartHeight;
+    yTicks.push({
+      value: tickValue,
+      y: y
+    });
+  }
+  
+  const yAxisLabels = yTicks.map(tick => 
+    `<text x="${margin.left - 12}" y="${tick.y + 4}" text-anchor="end" font-size="11" fill="#666">${tick.value}</text>`
+  ).join('');
+  
+  // Generate X-axis labels (return percentages) - more granular
+  const xTicks = [];
+  const xTickCount = 6;
+  for (let i = 0; i <= xTickCount; i++) {
+    const tickValue = minReturn + (maxReturn - minReturn) * (i / xTickCount);
+    const x = margin.left + (i / xTickCount) * chartWidth;
+    xTicks.push({
+      value: tickValue,
+      x: x
+    });
+  }
+  
+  const xAxisLabels = xTicks.map(tick => 
+    `<text x="${tick.x}" y="${height - 20}" text-anchor="middle" font-size="11" fill="#666">${(tick.value * 100).toFixed(1)}%</text>`
+  ).join('');
+  
   return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
     <!-- Background -->
     <rect width="${width}" height="${height}" fill="white"/>
@@ -468,15 +525,27 @@ function generateMonthlyDistChart(returns, dates, title = 'Monthly Distribution'
     <rect x="${margin.left}" y="${margin.top}" width="${chartWidth}" height="${chartHeight}" 
           fill="#fafafa" stroke="#e8e8e8" stroke-width="1"/>
     
+    <!-- Grid lines -->
+    ${yTicks.map(tick => `<line x1="${margin.left}" y1="${tick.y}" x2="${margin.left + chartWidth}" y2="${tick.y}" stroke="#f0f0f0" stroke-width="0.5"/>`).join('')}
+    ${xTicks.map(tick => `<line x1="${tick.x}" y1="${margin.top}" x2="${tick.x}" y2="${margin.top + chartHeight}" stroke="#f0f0f0" stroke-width="0.5"/>`).join('')}
+    
     <!-- Histogram bars -->
     ${bars}
     
     <!-- Title -->
     <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
     
+    <!-- Y-axis labels -->
+    ${yAxisLabels}
+    
     <!-- X-axis labels -->
-    <text x="${margin.left}" y="${height - 20}" font-size="11" fill="#666">${(minReturn * 100).toFixed(1)}%</text>
-    <text x="${margin.left + chartWidth}" y="${height - 20}" text-anchor="end" font-size="11" fill="#666">${(maxReturn * 100).toFixed(1)}%</text>
+    ${xAxisLabels}
+    
+    <!-- Y-axis title -->
+    <text x="20" y="${height/2}" text-anchor="middle" font-size="12" fill="#666" transform="rotate(-90, 20, ${height/2})">Frequency</text>
+    
+    <!-- X-axis title -->
+    <text x="${width/2}" y="${height - 5}" text-anchor="middle" font-size="12" fill="#666">Monthly Returns (%)</text>
   </svg>`;
 }
 
@@ -517,6 +586,27 @@ function generateDailyReturnsChart(returns, dates, title = 'Daily Returns') {
   // Zero line
   const zeroY = margin.top + ((maxValue - 0) / valueRange) * chartHeight;
   
+  // Add time axis labels (show start, middle, end + key points)
+  const timeLabels = [];
+  if (dates && dates.length > 0) {
+    const labelIndices = [
+      0, // Start
+      Math.floor(dates.length * 0.25), // 25%
+      Math.floor(dates.length * 0.5),  // 50% 
+      Math.floor(dates.length * 0.75), // 75%
+      dates.length - 1 // End
+    ];
+    
+    labelIndices.forEach(i => {
+      if (i < dates.length) {
+        const date = dates[i];
+        const x = margin.left + (i / (dates.length - 1)) * chartWidth;
+        const label = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        timeLabels.push(`<text x="${x}" y="${height - 15}" text-anchor="middle" font-size="11" fill="#555">${label}</text>`);
+      }
+    });
+  }
+  
   return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
     <!-- Background -->
     <rect width="${width}" height="${height}" fill="white"/>
@@ -534,6 +624,9 @@ function generateDailyReturnsChart(returns, dates, title = 'Daily Returns') {
     
     <!-- Title -->
     <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    
+    <!-- Time labels -->
+    ${timeLabels.join('')}
     
     <!-- Y-axis labels -->
     <text x="15" y="${margin.top + 10}" font-size="11" fill="#666">${(maxValue * 100).toFixed(1)}%</text>
@@ -582,6 +675,28 @@ function generateRollingVolatilityChart(returns, dates, title = 'Rolling Volatil
     return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
   }).join(' ');
   
+  // Add time axis labels (show start, middle, end + key points)
+  const timeLabels = [];
+  if (dates && dates.length > window) {
+    const adjustedDates = dates.slice(window - 1); // Skip first 29 dates since rolling starts at day 30
+    const labelIndices = [
+      0, // Start
+      Math.floor(adjustedDates.length * 0.25), // 25%
+      Math.floor(adjustedDates.length * 0.5),  // 50% 
+      Math.floor(adjustedDates.length * 0.75), // 75%
+      adjustedDates.length - 1 // End
+    ];
+    
+    labelIndices.forEach(i => {
+      if (i < adjustedDates.length) {
+        const date = adjustedDates[i];
+        const x = margin.left + (i / (adjustedDates.length - 1)) * chartWidth;
+        const label = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        timeLabels.push(`<text x="${x}" y="${height - 15}" text-anchor="middle" font-size="11" fill="#555">${label}</text>`);
+      }
+    });
+  }
+  
   return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
     <!-- Background -->
     <rect width="${width}" height="${height}" fill="white"/>
@@ -595,6 +710,9 @@ function generateRollingVolatilityChart(returns, dates, title = 'Rolling Volatil
     
     <!-- Title -->
     <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    
+    <!-- Time labels -->
+    ${timeLabels.join('')}
     
     <!-- Y-axis labels -->
     <text x="15" y="${margin.top + 10}" font-size="11" fill="#666">${(maxValue * 100).toFixed(1)}%</text>
@@ -643,6 +761,28 @@ function generateRollingSharpeChart(returns, dates, title = 'Rolling Sharpe (30 
     return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
   }).join(' ');
   
+  // Add time axis labels (show start, middle, end + key points)
+  const timeLabels = [];
+  if (dates && dates.length > window) {
+    const adjustedDates = dates.slice(window - 1); // Skip first 29 dates since rolling starts at day 30
+    const labelIndices = [
+      0, // Start
+      Math.floor(adjustedDates.length * 0.25), // 25%
+      Math.floor(adjustedDates.length * 0.5),  // 50% 
+      Math.floor(adjustedDates.length * 0.75), // 75%
+      adjustedDates.length - 1 // End
+    ];
+    
+    labelIndices.forEach(i => {
+      if (i < adjustedDates.length) {
+        const date = adjustedDates[i];
+        const x = margin.left + (i / (adjustedDates.length - 1)) * chartWidth;
+        const label = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        timeLabels.push(`<text x="${x}" y="${height - 15}" text-anchor="middle" font-size="11" fill="#555">${label}</text>`);
+      }
+    });
+  }
+  
   // Zero line
   const zeroY = margin.top + ((maxValue - 0) / valueRange) * chartHeight;
   
@@ -663,6 +803,9 @@ function generateRollingSharpeChart(returns, dates, title = 'Rolling Sharpe (30 
     
     <!-- Title -->
     <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    
+    <!-- Time labels -->
+    ${timeLabels.join('')}
     
     <!-- Y-axis labels -->
     <text x="15" y="${margin.top + 10}" font-size="11" fill="#666">${maxValue.toFixed(1)}</text>
@@ -720,6 +863,28 @@ function generateRollingSortinoChart(returns, dates, title = 'Rolling Sortino (3
     return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
   }).join(' ');
   
+  // Add time axis labels (show start, middle, end + key points)
+  const timeLabels = [];
+  if (dates && dates.length > window) {
+    const adjustedDates = dates.slice(window - 1); // Skip first 29 dates since rolling starts at day 30
+    const labelIndices = [
+      0, // Start
+      Math.floor(adjustedDates.length * 0.25), // 25%
+      Math.floor(adjustedDates.length * 0.5),  // 50% 
+      Math.floor(adjustedDates.length * 0.75), // 75%
+      adjustedDates.length - 1 // End
+    ];
+    
+    labelIndices.forEach(i => {
+      if (i < adjustedDates.length) {
+        const date = adjustedDates[i];
+        const x = margin.left + (i / (adjustedDates.length - 1)) * chartWidth;
+        const label = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        timeLabels.push(`<text x="${x}" y="${height - 15}" text-anchor="middle" font-size="11" fill="#555">${label}</text>`);
+      }
+    });
+  }
+  
   // Zero line
   const zeroY = margin.top + ((maxValue - 0) / valueRange) * chartHeight;
   
@@ -740,6 +905,9 @@ function generateRollingSortinoChart(returns, dates, title = 'Rolling Sortino (3
     
     <!-- Title -->
     <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    
+    <!-- Time labels -->
+    ${timeLabels.join('')}
     
     <!-- Y-axis labels -->
     <text x="15" y="${margin.top + 10}" font-size="11" fill="#666">${maxValue.toFixed(1)}</text>
@@ -1049,8 +1217,8 @@ function generateRollingBetaChart(returns, benchmark, dates, title = 'Rolling Be
  */
 function generateMonthlyHeatmapChart(returns, dates, title = 'Monthly Returns Heatmap') {
   const width = 576;
-  const height = 360;
-  const margin = { top: 40, right: 40, bottom: 80, left: 80 };
+  const height = 400; // Increased height to accommodate more top space
+  const margin = { top: 70, right: 40, bottom: 60, left: 80 }; // Increased top margin for headers
   const chartWidth = width - margin.left - margin.right;
   const chartHeight = height - margin.top - margin.bottom;
   
@@ -1174,8 +1342,8 @@ function generateMonthlyHeatmapChart(returns, dates, title = 'Monthly Returns He
     }
   };
   
-  const cellWidth = chartWidth / 12;
-  const cellHeight = Math.max(20, chartHeight / years.length);
+  const cellWidth = chartWidth / 12; // Evenly divide available width by 12 months
+  const cellHeight = chartHeight / Math.max(years.length, 1); // Evenly divide available height by number of years
   
   const cells = years.map((year, yearIndex) => {
     return months.map((month, monthIndex) => {
@@ -1184,27 +1352,32 @@ function generateMonthlyHeatmapChart(returns, dates, title = 'Monthly Returns He
       const y = margin.top + yearIndex * cellHeight;
       const color = getColor(value);
       
-      return `<rect x="${x}" y="${y}" width="${cellWidth - 1}" height="${cellHeight - 1}" 
-                    fill="${color}" stroke="white" stroke-width="1"/>
+      // Add small padding between cells for better visual separation
+      const cellPadding = 1;
+      const actualCellWidth = cellWidth - cellPadding;
+      const actualCellHeight = cellHeight - cellPadding;
+      
+      return `<rect x="${x}" y="${y}" width="${actualCellWidth}" height="${actualCellHeight}" 
+                    fill="${color}" stroke="white" stroke-width="0.5"/>
               ${value !== undefined ? 
                 `<text x="${x + cellWidth/2}" y="${y + cellHeight/2 + 3}" text-anchor="middle" 
-                       font-size="9" fill="black">${(value * 100).toFixed(1)}%</text>` : ''}`;
+                       font-size="${Math.min(10, cellHeight/3)}" fill="black">${(value * 100).toFixed(1)}%</text>` : ''}`;
     }).join('');
   }).join('');
   
-  // Month labels
+  // Month labels - positioned higher to use the extra top space
   const monthLabels = monthNames.map((name, index) => {
     const x = margin.left + index * cellWidth + cellWidth/2;
-    return `<text x="${x}" y="${margin.top - 10}" text-anchor="middle" font-size="10" fill="#666">${name}</text>`;
+    return `<text x="${x}" y="${margin.top - 20}" text-anchor="middle" font-size="11" fill="#666" font-weight="500">${name}</text>`;
   }).join('');
   
   // Year labels
   const yearLabels = years.map((year, index) => {
-    const y = margin.top + index * cellHeight + cellHeight/2 + 3;
-    return `<text x="${margin.left - 10}" y="${y}" text-anchor="end" font-size="10" fill="#666">${year}</text>`;
+    const y = margin.top + index * cellHeight + cellHeight/2 + 4;
+    return `<text x="${margin.left - 15}" y="${y}" text-anchor="end" font-size="11" fill="#666" font-weight="500">${year}</text>`;
   }).join('');
   
-  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+  return `<svg width="100%" height="100%" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">
     <!-- Background -->
     <rect width="${width}" height="${height}" fill="white"/>
     
@@ -1216,7 +1389,7 @@ function generateMonthlyHeatmapChart(returns, dates, title = 'Monthly Returns He
     ${yearLabels}
     
     <!-- Title -->
-    <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    <text x="${width/2}" y="30" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
   </svg>`;
 }
 
@@ -1589,7 +1762,7 @@ export function basic(returns, benchmark = null, title = 'Portfolio Performance 
       #eoy table td:last-of-type:after {
         content: '';
       }
-      #ddinfo table td:nth-of-type(3):after {
+      #ddinfo table td:nth-of-type(4):after {
         content: '%';
       }
       #ddinfo table th {
@@ -1601,7 +1774,7 @@ export function basic(returns, benchmark = null, title = 'Portfolio Performance 
       #ddinfo table th:nth-of-type(2) {
         text-align: left;
       }
-      #ddinfo table td:nth-of-type(3):after {
+      #ddinfo table td:nth-of-type(4):after {
         content: '%';
       }
       /* Modern row styling and color classes */
@@ -1854,8 +2027,8 @@ function calculateComprehensiveMetrics(returns, benchmark = null, rfRate = 0.02,
     
     metrics['Start Period'] = startDate;
     metrics['End Period'] = endDate;
-    metrics['Risk-Free Rate %'] = (rfRate * pct).toFixed(2);
-    metrics['Time in Market %'] = '100.00'; // Assuming full investment
+    metrics['Risk-Free Rate %'] = (rfRate * pct).toFixed(2) + '%';
+    metrics['Time in Market %'] = '100.00%'; // Assuming full investment
     
     // Core performance metrics
     metrics[''] = blank; // Python uses ~ for spacing
@@ -1866,8 +2039,8 @@ function calculateComprehensiveMetrics(returns, benchmark = null, rfRate = 0.02,
     const sharpe = stats.sharpe(cleanReturns, rfRate, 252, false);
     const maxDrawdown = stats.maxDrawdown(cleanReturns, false);
     
-    metrics['Cumulative Return %'] = (totalReturn * pct).toFixed(2);
-    metrics['CAGR﹪'] = (cagr * pct).toFixed(2);
+    metrics['Cumulative Return %'] = (totalReturn * pct).toFixed(2) + '%';
+    metrics['CAGR﹪'] = (cagr * pct).toFixed(2) + '%';
     
     // Risk metrics
     const sortino = stats.sortino(cleanReturns, rfRate, 252, false);
@@ -1879,7 +2052,7 @@ function calculateComprehensiveMetrics(returns, benchmark = null, rfRate = 0.02,
     if (mode.toLowerCase() === 'full') {
       try {
         const psr = stats.probabilisticSharpeRatio(cleanReturns, 0, 252, false);
-        metrics['Prob. Sharpe Ratio %'] = (psr * pct).toFixed(2);
+        metrics['Prob. Sharpe Ratio %'] = (psr * pct).toFixed(2) + '%';
         metrics['Smart Sharpe'] = sharpe.toFixed(2); // Placeholder
       } catch (psrError) {
         console.warn('PSR calculation failed:', psrError.message);
@@ -1895,19 +2068,19 @@ function calculateComprehensiveMetrics(returns, benchmark = null, rfRate = 0.02,
       metrics['Sortino/√2'] = (sortino / Math.sqrt(2)).toFixed(2);
     }
     
-    metrics['Volatility (ann.) %'] = (volatility * pct).toFixed(2);
+    metrics['Volatility (ann.) %'] = (volatility * pct).toFixed(2) + '%';
     
     // R-squared placeholder
     metrics['R²'] = (Math.random() * 0.3 + 0.7).toFixed(2);
     
-    metrics['Max Drawdown %'] = (maxDrawdown * pct).toFixed(2);
+    metrics['Max Drawdown %'] = (maxDrawdown * pct).toFixed(2) + '%';
     
     // Calculate drawdown details
     const ddDetails = utils.drawdownDetails(cleanReturns, false);
     const longestDdDays = ddDetails.length > 0 ? Math.max(...ddDetails.map(dd => dd.days)) : 0;
-    metrics['Longest DD Days *int'] = longestDdDays;
+    metrics['Longest DD Days'] = longestDdDays;
     
-    metrics['Volatility (ann.) %'] = (volatility * pct).toFixed(2);
+    metrics['Volatility (ann.) %'] = (volatility * pct).toFixed(2) + '%';
     
     // Calmar ratio
     metrics['Calmar'] = calmar.toFixed(2);
@@ -1925,18 +2098,18 @@ function calculateComprehensiveMetrics(returns, benchmark = null, rfRate = 0.02,
     const expectedMonthly = expectedDaily * 21; // Approximate monthly
     const expectedYearly = expectedDaily * 252;
     
-    metrics['Expected Daily %'] = (expectedDaily * pct).toFixed(2);
-    metrics['Expected Monthly %'] = (expectedMonthly * pct).toFixed(2);
-    metrics['Expected Yearly %'] = (expectedYearly * pct).toFixed(2);
+    metrics['Expected Daily %'] = (expectedDaily * pct).toFixed(2) + '%';
+    metrics['Expected Monthly %'] = (expectedMonthly * pct).toFixed(2) + '%';
+    metrics['Expected Yearly %'] = (expectedYearly * pct).toFixed(2) + '%';
     
     // Kelly Criterion
     const kelly = stats.kelly(cleanReturns, false);
-    metrics['Kelly Criterion %'] = (kelly * pct).toFixed(2);
+    metrics['Kelly Criterion %'] = (kelly * pct).toFixed(2) + '%';
     
     // Risk metrics
     if (mode.toLowerCase() === 'full') {
       const riskOfRuin = stats.riskOfRuin(cleanReturns, false);
-      metrics['Risk of Ruin %'] = (riskOfRuin * pct).toFixed(2);
+      metrics['Risk of Ruin %'] = (riskOfRuin * pct).toFixed(2) + '%';
     }
     
     // VaR metrics
@@ -1944,8 +2117,8 @@ function calculateComprehensiveMetrics(returns, benchmark = null, rfRate = 0.02,
       const var95 = stats.valueAtRisk(cleanReturns, 1, 0.95, false);
       const cvar95 = stats.cvar(cleanReturns, 0.05, false);
       
-      metrics['Daily Value-at-Risk %'] = (var95 * pct).toFixed(2);
-      metrics['Expected Shortfall (cVaR) %'] = (cvar95 * pct).toFixed(2);
+      metrics['Daily Value-at-Risk %'] = (var95 * pct).toFixed(2) + '%';
+      metrics['Expected Shortfall (cVaR) %'] = (cvar95 * pct).toFixed(2) + '%';
     } catch (varError) {
       console.warn('VaR calculation failed:', varError.message);
       metrics['Daily Value-at-Risk %'] = null;
@@ -1977,8 +2150,8 @@ function calculateComprehensiveMetrics(returns, benchmark = null, rfRate = 0.02,
       
       // Consecutive wins/losses
       const { maxConsecutiveWins, maxConsecutiveLosses } = calculateConsecutiveWinsLosses(cleanReturns);
-      metrics['Max Consecutive Wins *int'] = maxConsecutiveWins;
-      metrics['Max Consecutive Losses *int'] = maxConsecutiveLosses;
+      metrics['Max Consecutive Wins'] = maxConsecutiveWins;
+      metrics['Max Consecutive Losses'] = maxConsecutiveLosses;
     }
     
     // Time period returns
@@ -1986,31 +2159,31 @@ function calculateComprehensiveMetrics(returns, benchmark = null, rfRate = 0.02,
     
     // MTD, 3M, 6M, YTD, 1Y, 3Y, 5Y, 10Y, All-time calculations
     const mtdReturns = calculatePeriodReturn(returns, 'mtd');
-    metrics['MTD %'] = mtdReturns !== null ? (mtdReturns * pct).toFixed(2) : '-';
+    metrics['MTD %'] = mtdReturns !== null ? (mtdReturns * pct).toFixed(2) + '%' : '-';
     
     const threeMonthReturns = calculatePeriodReturn(returns, '3m');  
-    metrics['3M %'] = threeMonthReturns !== null ? (threeMonthReturns * pct).toFixed(2) : '-';
+    metrics['3M %'] = threeMonthReturns !== null ? (threeMonthReturns * pct).toFixed(2) + '%' : '-';
     
     const sixMonthReturns = calculatePeriodReturn(returns, '6m');
-    metrics['6M %'] = sixMonthReturns !== null ? (sixMonthReturns * pct).toFixed(2) : '-';
+    metrics['6M %'] = sixMonthReturns !== null ? (sixMonthReturns * pct).toFixed(2) + '%' : '-';
     
     const ytdReturns = calculatePeriodReturn(returns, 'ytd');
-    metrics['YTD %'] = ytdReturns !== null ? (ytdReturns * pct).toFixed(2) : '-';
+    metrics['YTD %'] = ytdReturns !== null ? (ytdReturns * pct).toFixed(2) + '%' : '-';
     
     // Annualized returns for different periods
     const oneYearCAGR = calculateCAGRForPeriod(returns, 1);
-    metrics['1Y (ann.) %'] = oneYearCAGR !== null ? (oneYearCAGR * pct).toFixed(2) : '-';
+    metrics['1Y (ann.) %'] = oneYearCAGR !== null ? (oneYearCAGR * pct).toFixed(2) + '%' : '-';
     
     const threeYearCAGR = calculateCAGRForPeriod(returns, 3);
-    metrics['3Y (ann.) %'] = threeYearCAGR !== null ? (threeYearCAGR * pct).toFixed(2) : '-';
+    metrics['3Y (ann.) %'] = threeYearCAGR !== null ? (threeYearCAGR * pct).toFixed(2) + '%' : '-';
     
     const fiveYearCAGR = calculateCAGRForPeriod(returns, 5);
-    metrics['5Y (ann.) %'] = fiveYearCAGR !== null ? (fiveYearCAGR * pct).toFixed(2) : '-';
+    metrics['5Y (ann.) %'] = fiveYearCAGR !== null ? (fiveYearCAGR * pct).toFixed(2) + '%' : '-';
     
     const tenYearCAGR = calculateCAGRForPeriod(returns, 10);
-    metrics['10Y (ann.) %'] = tenYearCAGR !== null ? (tenYearCAGR * pct).toFixed(2) : '-';
+    metrics['10Y (ann.) %'] = tenYearCAGR !== null ? (tenYearCAGR * pct).toFixed(2) + '%' : '-';
     
-    metrics['All-time (ann.) %'] = (cagr * pct).toFixed(2);
+    metrics['All-time (ann.) %'] = (cagr * pct).toFixed(2) + '%';
     
     // Best/worst performance (full mode only)
     if (mode.toLowerCase() === 'full') {
@@ -2018,31 +2191,31 @@ function calculateComprehensiveMetrics(returns, benchmark = null, rfRate = 0.02,
       
       const bestDay = stats.best(cleanReturns, null, true, false);
       const worstDay = stats.worst(cleanReturns, null, true, false);
-      metrics['Best Day %'] = (bestDay * pct).toFixed(2);
-      metrics['Worst Day %'] = (worstDay * pct).toFixed(2);
+      metrics['Best Day %'] = (bestDay * pct).toFixed(2) + '%';
+      metrics['Worst Day %'] = (worstDay * pct).toFixed(2) + '%';
       
       const bestMonth = stats.best(cleanReturns, 'M', true, false);
       const worstMonth = stats.worst(cleanReturns, 'M', false, false);
-      metrics['Best Month %'] = (bestMonth * pct).toFixed(2);
-      metrics['Worst Month %'] = (worstMonth * pct).toFixed(2);
+      metrics['Best Month %'] = (bestMonth * pct).toFixed(2) + '%';
+      metrics['Worst Month %'] = (worstMonth * pct).toFixed(2) + '%';
       
       const bestYear = stats.best(cleanReturns, 'A', true, false);
       const worstYear = stats.worst(cleanReturns, 'A', true, false);
-      metrics['Best Year %'] = (bestYear * pct).toFixed(2);
-      metrics['Worst Year %'] = (worstYear * pct).toFixed(2);
+      metrics['Best Year %'] = (bestYear * pct).toFixed(2) + '%';
+      metrics['Worst Year %'] = (worstYear * pct).toFixed(2) + '%';
     }
     
     // Drawdown section
     metrics['    '] = blank; // Fifth spacer for drawdowns
     
     // Add drawdown details (matching Python structure)
-    const avgDrawdown = ddDetails.length > 0 ? ddDetails.reduce((sum, dd) => sum + dd.maxDrawdown, 0) / ddDetails.length : 0;
+    const avgDrawdown = ddDetails.length > 0 ? ddDetails.reduce((sum, dd) => sum + dd['max drawdown'], 0) / ddDetails.length : 0;
     const avgDdDays = ddDetails.length > 0 ? ddDetails.reduce((sum, dd) => sum + dd.days, 0) / ddDetails.length : 0;
     
-    metrics['Max Drawdown %'] = (maxDrawdown * pct).toFixed(2);
-    metrics['Longest DD Days *int'] = longestDdDays;
-    metrics['Avg. Drawdown %'] = (avgDrawdown * pct).toFixed(2);
-    metrics['Avg. Drawdown Days *int'] = Math.round(avgDdDays);
+    metrics['Max Drawdown %'] = (maxDrawdown * pct).toFixed(2) + '%';
+    metrics['Longest DD Days'] = longestDdDays;
+    metrics['Avg. Drawdown %'] = avgDrawdown.toFixed(2) + '%';
+    metrics['Avg. Drawdown Days'] = Math.round(avgDdDays);
     
     // Recovery and other indices
     const recoveryFactor = Math.abs(maxDrawdown) > 0 ? totalReturn / Math.abs(maxDrawdown) : 0;
@@ -2063,30 +2236,30 @@ function calculateComprehensiveMetrics(returns, benchmark = null, rfRate = 0.02,
       
       if (monthlyWins.length > 0) {
         const avgUpMonth = monthlyWins.reduce((sum, r) => sum + r, 0) / monthlyWins.length;
-        metrics['Avg. Up Month %'] = (avgUpMonth * pct).toFixed(2);
+        metrics['Avg. Up Month'] = (avgUpMonth * pct).toFixed(2) + '%';
       } else {
-        metrics['Avg. Up Month %'] = '-';
+        metrics['Avg. Up Month'] = '-';
       }
       
       if (monthlyLosses.length > 0) {
         const avgDownMonth = monthlyLosses.reduce((sum, r) => sum + r, 0) / monthlyLosses.length;
-        metrics['Avg. Down Month %'] = (avgDownMonth * pct).toFixed(2);
+        metrics['Avg. Down Month'] = (avgDownMonth * pct).toFixed(2) + '%';
       } else {
-        metrics['Avg. Down Month %'] = '-';
+        metrics['Avg. Down Month'] = '-';
       }
       
       // Win rates for different periods
       const winRate = stats.winRate(cleanReturns, false);
-      metrics['Win Days %%'] = (winRate * pct).toFixed(2);
+      metrics['Win Days %'] = (winRate * pct).toFixed(2) + '%';
       
       const monthlyWinRate = calculateMonthlyWinRate(returns);
-      metrics['Win Month %%'] = monthlyWinRate !== null ? (monthlyWinRate * pct).toFixed(2) : '-';
+      metrics['Win Month %'] = monthlyWinRate !== null ? (monthlyWinRate * pct).toFixed(2) + '%' : '-';
       
       const quarterlyWinRate = calculateQuarterlyWinRate(returns);
-      metrics['Win Quarter %%'] = quarterlyWinRate !== null ? (quarterlyWinRate * pct).toFixed(2) : '-';
+      metrics['Win Quarter %'] = quarterlyWinRate !== null ? (quarterlyWinRate * pct).toFixed(2) + '%' : '-';
       
       const yearlyWinRate = calculateYearlyWinRate(returns);
-      metrics['Win Year %%'] = yearlyWinRate !== null ? (yearlyWinRate * pct).toFixed(2) : '-';
+      metrics['Win Year %'] = yearlyWinRate !== null ? (yearlyWinRate * pct).toFixed(2) + '%' : '-';
     }
     
     // Benchmark comparison (if benchmark provided and full mode)
@@ -2126,87 +2299,6 @@ function calculateComprehensiveMetrics(returns, benchmark = null, rfRate = 0.02,
     console.error('Error calculating comprehensive metrics:', error.message);
     throw error;
   }
-}
-
-function generateFallbackMetrics() {
-  return {
-    'Start Period': '2023-01-01',
-    'End Period': '2023-12-30',
-    'Risk-Free Rate %': '2.00',
-    'Time in Market %': '100.00',
-    '': '', // First spacer
-    'Cumulative Return %': '12.50',
-    'CAGR﹪': '12.50',
-    'Sharpe': '0.85',
-    'Prob. Sharpe Ratio %': '75.60',
-    'Smart Sharpe': '0.85',
-    'Sortino': '1.25',
-    'Smart Sortino': '1.25',
-    'Sortino/√2': '0.88',
-    'Volatility (ann.) %': '14.70',
-    'R²': '0.82',
-    'Max Drawdown %': '-8.50',
-    'Longest DD Days *int': '42',
-    'Volatility (ann.) %': '14.70',
-    'Calmar': '1.47',
-    'Skew': '-0.15',
-    'Kurtosis': '2.85',
-    ' ': '', // Second spacer
-    'Expected Daily %': '0.05',
-    'Expected Monthly %': '1.05',
-    'Expected Yearly %': '12.50',
-    'Kelly Criterion %': '8.40',
-    'Risk of Ruin %': '0.10',
-    'Daily Value-at-Risk %': '-2.25',
-    'Expected Shortfall (cVaR) %': '-3.15',
-    'Gain/Loss Ratio': '1.35',
-    'Payoff Ratio': '1.35',
-    'Profit Factor': '1.45',
-    'Common Sense Ratio': '1.45',
-    'CPC Index': '0.92',
-    'Tail Ratio': '1.35',
-    'Outlier Win Ratio': '1.35',
-    'Outlier Loss Ratio': '1.35',
-    'Max Consecutive Wins *int': '8',
-    'Max Consecutive Losses *int': '4',
-    '  ': '', // Third spacer
-    'MTD %': '2.15',
-    '3M %': '3.80',
-    '6M %': '7.25',
-    'YTD %': '12.50',
-    '1Y (ann.) %': '12.50',
-    '3Y (ann.) %': '-',
-    '5Y (ann.) %': '-',
-    '10Y (ann.) %': '-',
-    'All-time (ann.) %': '12.50',
-    '   ': '', // Fourth spacer 
-    'Best Day %': '4.25',
-    'Worst Day %': '-3.15',
-    'Best Month %': '8.45',
-    'Worst Month %': '-5.20',
-    'Best Year %': '12.50',
-    'Worst Year %': '12.50',
-    '    ': '', // Fifth spacer
-    'Max Drawdown %': '-8.50',
-    'Longest DD Days *int': '42',
-    'Avg. Drawdown %': '-3.25',
-    'Avg. Drawdown Days *int': '18',
-    'Recovery Factor': '1.47',
-    'Ulcer Index': '4.25',
-    'Serenity Index': '2.85',
-    '     ': '', // Sixth spacer
-    'Avg. Up Month %': '4.15',
-    'Avg. Down Month %': '-2.85',
-    'Win Days %%': '58.50',
-    'Win Month %%': '66.70',
-    'Win Quarter %%': '75.00',
-    'Win Year %%': '100.00',
-    '      ': '', // Seventh spacer
-    'Beta': '0.95',
-    'Alpha': '2.15',
-    'Correlation': '78.50%',
-    'Treynor Ratio': '13.15%'
-  };
 }
 
 function generateMetricsTable(metrics) {
@@ -2255,7 +2347,7 @@ function generateEOYTable(returns) {
       const yearReturns = yearlyReturns[year];
       // Calculate compound return for the year
       const totalReturn = yearReturns.reduce((acc, ret) => acc * (1 + ret), 1) - 1;
-      tableRows += `<tr><td>${year}</td><td>${(totalReturn * 100).toFixed(2)}</td></tr>\n`;
+      tableRows += `<tr><td>${year}</td><td>${(totalReturn * 100).toFixed(2)}%</td></tr>\n`;
     });
     
     return `<table>
