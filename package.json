@@ -1,7 +1,7 @@
 {
   "name": "quantstats-js",
   "version": "2.0.0",
-  "description": "Portfolio analytics for quantitative trading - Node.js implementation",
+    "description": "Comprehensive portfolio analytics and professional tearsheet generation library for JavaScript/Node.js - create beautiful HTML reports with 13+ financial charts and 40+ metrics",
   "main": "index.js",
   "type": "module",
   "scripts": {
@@ -19,10 +19,20 @@
     "finance",
     "quant",
     "trading",
+    "tearsheet",
+    "reports",
+    "charts",
+    "visualization",
     "sharpe",
     "sortino",
     "drawdown",
-    "volatility"
+    "volatility",
+    "risk-management",
+    "performance-analysis",
+    "financial-metrics",
+    "backtesting",
+    "html-reports",
+    "professional-charts"
   ],
   "author": "whsmacon",
   "license": "Apache-2.0",

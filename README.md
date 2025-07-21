@@ -1,11 +1,11 @@
-# QuantStats.js
+# QuantStats JS 📊
 
-[![npm version](https://badge.fury.io/js/quantstats-js.svg)](https://badge.fury.io/js/quantstats-js)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![npm version](https://badge.fury.io/js/quantstats.svg)](https://badge.fury.io/js/quantstats)
+[![license](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-**Portfolio analytics for quantitative trading in Node.js**
+**Comprehensive portfolio analytics and professional tearsheet generation for JavaScript/Node.js**
 
-QuantStats.js is a comprehensive Node.js library for portfolio performance analysis, providing mathematically accurate implementations of key financial metrics and **professional HTML tearsheet generation**. This library is a faithful port of the popular Python QuantStats library, ensuring identical calculations and results.
+Create stunning HTML reports with 13+ financial charts and 40+ metrics, bringing quantitative finance analysis to the JavaScript ecosystem.
 
 ## ✨ Features
 
