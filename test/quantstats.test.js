@@ -138,7 +138,7 @@ describe('QuantStats.js Tests', () => {
     });
 
     test('valueAtRisk should calculate VaR correctly', () => {
-      const var95 = qs.stats.valueAtRisk(testReturns, 0.05);
+      const var95 = qs.stats.valueAtRisk(testReturns, 1, 0.95);
       
       // Should be negative (representing a loss)
       assert.equal(var95 < 0, true);
@@ -258,7 +258,11 @@ describe('QuantStats.js Tests', () => {
     });
 
     test('html report should generate valid HTML', () => {
-      const htmlReport = qs.reports.basic(testReturns);
+      // Create proper data structure for reports
+      const dates = testReturns.map((_, i) => new Date(2023, 0, i + 1));
+      const returnsData = { values: testReturns, index: dates };
+      
+      const htmlReport = qs.reports.basic(returnsData);
       
       // Should contain HTML structure
       assert.equal(htmlReport.includes('<!DOCTYPE html>'), true);
@@ -276,6 +280,10 @@ describe('QuantStats.js Tests', () => {
       // Convert prices to returns
       const returns = qs.utils.toReturns(testPrices);
       
+      // Create proper data structure for reports
+      const dates = returns.map((_, i) => new Date(2023, 0, i + 1));
+      const returnsData = { values: returns, index: dates };
+      
       // Calculate metrics
       const metrics = qs.reports.metrics(returns);
       
@@ -283,7 +291,7 @@ describe('QuantStats.js Tests', () => {
       const plotData = qs.plots.dashboard(returns);
       
       // Generate report
-      const report = qs.reports.basic(returns);
+      const report = qs.reports.basic(returnsData);
       
       // All should be valid
       assert.equal(typeof metrics.sharpe, 'number');
