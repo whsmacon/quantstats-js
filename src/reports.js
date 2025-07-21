@@ -331,9 +331,9 @@ function generateCumulativeReturnsChart(returns, dates, title = 'Cumulative Retu
  * Generate EOY Returns bar chart
  */
 function generateEOYReturnsChart(returns, dates, title = 'EOY Returns') {
-  const width = 576;
-  const height = 360;
-  const margin = { top: 40, right: 40, bottom: 80, left: 60 };
+  const width = 640; // Slightly wider for better year label spacing
+  const height = 420; // Taller for angled labels
+  const margin = { top: 50, right: 40, bottom: 100, left: 70 }; // Much larger bottom margin for angled labels
   const chartWidth = width - margin.left - margin.right;
   const chartHeight = height - margin.top - margin.bottom;
   
@@ -361,66 +361,99 @@ function generateEOYReturnsChart(returns, dates, title = 'EOY Returns') {
   }
   
   if (!yearlyReturns || yearlyReturns.length === 0) {
-    return `<svg width="576" height="360" viewBox="0 0 576 360">
-      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
-      <text x="288" y="180" text-anchor="middle" fill="#6c757d">No EOY data available</text>
+    return `<svg width="640" height="420" viewBox="0 0 640 420">
+      <rect width="640" height="420" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="320" y="210" text-anchor="middle" fill="#6c757d">No EOY data available</text>
     </svg>`;
   }
   
-  const minValue = Math.min(...yearlyReturns, 0);
-  const maxValue = Math.max(...yearlyReturns, 0);
+  const minValue = Math.min(...yearlyReturns, -0.05);
+  const maxValue = Math.max(...yearlyReturns, 0.05);
   const valueRange = maxValue - minValue || 1;
   
-  // Calculate bar dimensions
-  const barSpacing = 4;
-  const barWidth = Math.max(8, (chartWidth - (yearlyReturns.length - 1) * barSpacing) / yearlyReturns.length);
+  // Calculate bar dimensions with better spacing
+  const barSpacing = Math.max(6, chartWidth / yearlyReturns.length * 0.2);
+  const barWidth = Math.max(20, (chartWidth - (yearlyReturns.length - 1) * barSpacing) / yearlyReturns.length);
   
-  // Generate bars
+  // Function to convert value to y-coordinate
+  const valueToY = (value) => {
+    return margin.top + chartHeight - ((value - minValue) / valueRange) * chartHeight;
+  };
+  
+  const zeroY = valueToY(0);
+  
+  // Generate bars with enhanced styling and angled year labels
   const bars = yearlyReturns.map((value, index) => {
     const x = margin.left + index * (barWidth + barSpacing);
-    const barHeight = Math.abs(value / valueRange) * chartHeight;
+    const barY = valueToY(value);
+    const barHeight = Math.abs(barY - zeroY);
     const isPositive = value >= 0;
-    const zeroY = margin.top + (maxValue / valueRange) * chartHeight;
-    const y = isPositive ? zeroY - barHeight : zeroY;
+    const finalY = isPositive ? barY : zeroY;
     
-    const color = isPositive ? '#2ca02c' : '#d62728';
+    const color = isPositive ? '#2E8B57' : '#DC143C'; // Darker, more professional colors
+    const hoverColor = isPositive ? '#228B22' : '#B22222';
     
-    return `<rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" fill="${color}"/>`;
+    // Calculate position for angled label
+    const labelX = x + barWidth/2;
+    const labelY = height - margin.bottom + 50; // Position in the extended bottom margin
+    
+    // Get the year for this bar
+    const year = years[index] || (new Date().getFullYear() - yearlyReturns.length + index + 1);
+    
+    return `<rect x="${x}" y="${finalY}" width="${barWidth}" height="${barHeight}" 
+                  fill="${color}" opacity="0.85" stroke="${hoverColor}" stroke-width="0.5"/>
+            
+            <!-- Value label above/below bar -->
+            <text x="${x + barWidth/2}" y="${finalY - (isPositive ? 8 : -(barHeight + 18))}" 
+                  text-anchor="middle" font-size="11" font-weight="500" fill="#333">
+                  ${(value * 100).toFixed(1)}%</text>
+            
+            <!-- Angled year label -->
+            <text x="${labelX}" y="${labelY}" text-anchor="start" font-size="12" font-weight="500" fill="#555"
+                  transform="rotate(-45 ${labelX} ${labelY})">${year}</text>`;
   }).join('');
   
-  // Generate year labels
-  const yearLabels = years.map((year, index) => {
-    const x = margin.left + index * (barWidth + barSpacing) + barWidth / 2;
-    return `<text x="${x}" y="${height - 15}" text-anchor="middle" font-size="11" fill="#555">${year}</text>`;
-  }).join('');
+  // Enhanced grid lines
+  const gridLines = [];
+  const numGridLines = 6;
+  for (let i = 0; i <= numGridLines; i++) {
+    const gridValue = minValue + (valueRange * i / numGridLines);
+    const y = valueToY(gridValue);
+    const isZero = Math.abs(gridValue) < 0.001;
+    
+    gridLines.push(`<line x1="${margin.left}" y1="${y}" x2="${width - margin.right}" y2="${y}" 
+                           stroke="${isZero ? '#666' : '#e5e5e5'}" 
+                           stroke-width="${isZero ? '2' : '1'}" 
+                           ${isZero ? '' : 'stroke-dasharray="3,3"'}/>`);
+    gridLines.push(`<text x="${margin.left - 15}" y="${y + 4}" text-anchor="end" 
+                           font-size="10" fill="#666" font-weight="500">
+                           ${(gridValue * 100).toFixed(0)}%</text>`);
+  }
   
-  // Zero line
-  const zeroY = margin.top + (maxValue / valueRange) * chartHeight;
-  
-  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+  return `<svg width="100%" height="100%" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">
     <!-- Background -->
     <rect width="${width}" height="${height}" fill="white"/>
     
-    <!-- Chart area -->
-    <rect x="${margin.left}" y="${margin.top}" width="${chartWidth}" height="${chartHeight}" 
-          fill="#fafafa" stroke="#e8e8e8" stroke-width="1"/>
+    <!-- Chart area background -->
+    <rect x="${margin.left-2}" y="${margin.top-2}" width="${chartWidth+4}" height="${chartHeight+4}" 
+          fill="#fafafa" stroke="none"/>
     
-    <!-- Zero line -->
-    <line x1="${margin.left}" y1="${zeroY}" x2="${margin.left + chartWidth}" y2="${zeroY}" 
-          stroke="#666" stroke-width="1" stroke-dasharray="2,3"/>
+    <!-- Grid lines -->
+    ${gridLines.join('')}
+    
+    <!-- Chart border -->
+    <rect x="${margin.left}" y="${margin.top}" width="${chartWidth}" height="${chartHeight}" 
+          fill="none" stroke="#ddd" stroke-width="1"/>
     
     <!-- Bars -->
     ${bars}
     
     <!-- Title -->
-    <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    <text x="${width/2}" y="30" text-anchor="middle" font-size="16" font-weight="600" fill="#333">${title}</text>
     
-    <!-- Year labels -->
-    ${yearLabels}
-    
-    <!-- Y-axis labels -->
-    <text x="15" y="${margin.top + 10}" font-size="11" fill="#666">${(maxValue * 100).toFixed(0)}%</text>
-    <text x="15" y="${margin.top + chartHeight - 5}" font-size="11" fill="#666">${(minValue * 100).toFixed(0)}%</text>
+    <!-- Y-axis label -->
+    <text x="25" y="${height/2}" text-anchor="middle" font-size="12" fill="#666" font-weight="500"
+          transform="rotate(-90 25 ${height/2})">Annual Returns (%)</text>
   </svg>`;
 }
 
@@ -1106,143 +1139,184 @@ function generateVolReturnsChart(returns, dates, title = 'Volatility vs Returns'
  * Generate Monthly Heatmap chart
  */
 function generateMonthlyHeatmapChart(returns, dates, title = 'Monthly Returns Heatmap') {
-  const width = 576;
-  const height = 400; // Increased height to accommodate more top space
-  const margin = { top: 70, right: 40, bottom: 60, left: 80 }; // Increased top margin for headers
-  const chartWidth = width - margin.left - margin.right;
-  const chartHeight = height - margin.top - margin.bottom;
+  // Dynamic sizing based on data
+  const baseWidth = 720; // Wider for better month spacing
+  const margin = { top: 80, right: 50, bottom: 70, left: 90 };
   
   // Properly handle returns data format
   const returnsData = returns.values ? returns.values : (Array.isArray(returns) ? returns : []);
+  const datesData = dates || (returns.index ? returns.index : null);
   
   if (!returnsData || returnsData.length === 0) {
-    return `<svg width="576" height="360" viewBox="0 0 576 360">
-      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
-      <text x="288" y="180" text-anchor="middle" fill="#6c757d">No data for monthly heatmap</text>
+    return `<svg width="720" height="400" viewBox="0 0 720 400">
+      <rect width="720" height="400" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="360" y="200" text-anchor="middle" fill="#6c757d">No data for monthly heatmap</text>
     </svg>`;
   }
-  
-  // Calculate monthly returns manually if the stats function doesn't work
+
+  // Calculate monthly returns using dates if available, otherwise use fallback
   let monthlyReturnsObj = {};
   
-  try {
-    // Try using the existing stats function first
-    monthlyReturnsObj = stats.monthlyReturns(returnsData, false);
+  if (datesData && datesData.length === returnsData.length) {
+    // Use actual dates for proper monthly grouping
+    const monthlyMap = new Map();
     
-    // Check if we got valid results
-    if (!monthlyReturnsObj || Object.keys(monthlyReturnsObj).length === 0) {
-      throw new Error("Empty result from stats.monthlyReturns");
+    for (let i = 0; i < returnsData.length; i++) {
+      const date = new Date(datesData[i]);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      
+      if (!monthlyMap.has(monthKey)) {
+        monthlyMap.set(monthKey, []);
+      }
+      monthlyMap.get(monthKey).push(returnsData[i]);
     }
-  } catch (e) {
-    console.log("Using fallback monthly calculation:", e.message);
     
-    // Fallback: Calculate monthly returns using a more sophisticated approach
-    // Group returns into calendar months if we have 252+ data points (assume daily data)
-    if (returnsData.length >= 20) {
-      const monthSize = Math.max(20, Math.floor(returnsData.length / 24)); // Roughly monthly chunks
-      let monthIndex = 0;
-      let monthStart = 0;
-      
-      // Start from a reasonable date
-      const startYear = 2022;
-      const startMonth = 7; // July 2022 based on your data
-      
-      while (monthStart < returnsData.length) {
-        const monthEnd = Math.min(monthStart + monthSize, returnsData.length);
-        const monthData = returnsData.slice(monthStart, monthEnd);
-        
-        if (monthData.length > 0) {
-          // Calculate compound return for the month
-          let monthReturn = 1;
-          for (let i = 0; i < monthData.length; i++) {
-            if (monthData[i] !== null && monthData[i] !== undefined && !isNaN(monthData[i])) {
-              monthReturn *= (1 + monthData[i]);
-            }
-          }
-          monthReturn -= 1;
-          
-          // Create date key
-          const totalMonths = monthIndex;
-          const year = startYear + Math.floor((startMonth - 1 + totalMonths) / 12);
-          const month = String(((startMonth - 1 + totalMonths) % 12) + 1).padStart(2, '0');
-          
-          monthlyReturnsObj[`${year}-${month}`] = monthReturn;
+    // Calculate compound returns for each month
+    for (const [monthKey, dailyReturns] of monthlyMap.entries()) {
+      let monthReturn = 1;
+      for (const dailyReturn of dailyReturns) {
+        if (dailyReturn !== null && dailyReturn !== undefined && !isNaN(dailyReturn)) {
+          monthReturn *= (1 + dailyReturn);
         }
+      }
+      monthlyReturnsObj[monthKey] = monthReturn - 1;
+    }
+  } else {
+    // Fallback calculation
+    try {
+      monthlyReturnsObj = stats.monthlyReturns(returnsData, false);
+      if (!monthlyReturnsObj || Object.keys(monthlyReturnsObj).length === 0) {
+        throw new Error("Empty result from stats.monthlyReturns");
+      }
+    } catch (e) {
+      console.log("Using fallback monthly calculation:", e.message);
+      
+      if (returnsData.length >= 20) {
+        const monthSize = Math.max(20, Math.floor(returnsData.length / 24));
+        let monthIndex = 0;
+        let monthStart = 0;
+        const startYear = 2022;
+        const startMonth = 7;
         
-        monthStart = monthEnd;
-        monthIndex++;
-        
-        // Prevent infinite loop
-        if (monthIndex > 50) break;
+        while (monthStart < returnsData.length) {
+          const monthEnd = Math.min(monthStart + monthSize, returnsData.length);
+          const monthData = returnsData.slice(monthStart, monthEnd);
+          
+          if (monthData.length > 0) {
+            let monthReturn = 1;
+            for (let i = 0; i < monthData.length; i++) {
+              if (monthData[i] !== null && monthData[i] !== undefined && !isNaN(monthData[i])) {
+                monthReturn *= (1 + monthData[i]);
+              }
+            }
+            monthReturn -= 1;
+            
+            const totalMonths = monthIndex;
+            const year = startYear + Math.floor((startMonth - 1 + totalMonths) / 12);
+            const month = String(((startMonth - 1 + totalMonths) % 12) + 1).padStart(2, '0');
+            
+            monthlyReturnsObj[`${year}-${month}`] = monthReturn;
+          }
+          
+          monthStart = monthEnd;
+          monthIndex++;
+          
+          if (monthIndex > 50) break;
+        }
       }
     }
   }
   
   if (Object.keys(monthlyReturnsObj).length === 0) {
-    return `<svg width="576" height="360" viewBox="0 0 576 360">
-      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
-      <text x="288" y="180" text-anchor="middle" fill="#6c757d">Unable to calculate monthly returns</text>
+    return `<svg width="720" height="400" viewBox="0 0 720 400">
+      <rect width="720" height="400" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="360" y="200" text-anchor="middle" fill="#6c757d">Unable to calculate monthly returns</text>
     </svg>`;
   }
   
-  // Organize data by year and month
+  // Create complete year/month grid - show ALL years and months
+  const allDates = Object.keys(monthlyReturnsObj);
+  if (allDates.length === 0) {
+    return `<svg width="720" height="400" viewBox="0 0 720 400">
+      <rect width="720" height="400" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="360" y="200" text-anchor="middle" fill="#6c757d">No monthly data to display</text>
+    </svg>`;
+  }
+  
+  // Find date range
+  const years = [];
+  allDates.forEach(dateStr => {
+    const year = parseInt(dateStr.split('-')[0]);
+    if (!years.includes(year)) {
+      years.push(year);
+    }
+  });
+  years.sort((a, b) => a - b);
+  
+  // Fill in missing years to create complete range
+  const minYear = Math.min(...years);
+  const maxYear = Math.max(...years);
+  const completeYears = [];
+  for (let year = minYear; year <= maxYear; year++) {
+    completeYears.push(year);
+  }
+  
+  const months = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  
+  // Create heatmap data structure with ALL year/month combinations
   const heatmapData = {};
   const allValues = [];
   
-  Object.entries(monthlyReturnsObj).forEach(([dateStr, value]) => {
-    const parts = dateStr.split('-');
-    if (parts.length >= 2) {
-      const year = parts[0];
-      const month = parts[1];
-      if (!heatmapData[year]) heatmapData[year] = {};
-      heatmapData[year][month] = value;
-      allValues.push(value);
-    }
+  completeYears.forEach(year => {
+    heatmapData[year] = {};
+    months.forEach(month => {
+      const monthKey = `${year}-${month}`;
+      const value = monthlyReturnsObj[monthKey];
+      heatmapData[year][month] = value; // undefined if no data
+      if (value !== undefined) {
+        allValues.push(value);
+      }
+    });
   });
   
-  if (allValues.length === 0) {
-    return `<svg width="576" height="360" viewBox="0 0 576 360">
-      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
-      <text x="288" y="180" text-anchor="middle" fill="#6c757d">No monthly data to display</text>
-    </svg>`;
-  }
-  
-  const years = Object.keys(heatmapData).sort();
-  const months = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  // Dynamic sizing based on number of years
+  const cellWidth = 50; // Fixed width for consistency
+  const cellHeight = 35; // More square-like, good height for readability
+  const chartWidth = 12 * cellWidth; // 12 months
+  const chartHeight = completeYears.length * cellHeight;
+  const totalWidth = chartWidth + margin.left + margin.right;
+  const totalHeight = chartHeight + margin.top + margin.bottom;
   
   const minValue = Math.min(...allValues);
   const maxValue = Math.max(...allValues);
   const absMax = Math.max(Math.abs(minValue), Math.abs(maxValue));
   
-  // Color scale function - improved to handle extreme values
+  // Enhanced color scale
   const getColor = (value) => {
-    if (value === undefined) return '#f0f0f0';
+    if (value === undefined) return '#f5f5f5'; // Light gray for missing data
     
     const normalized = value / (absMax || 1);
     
     if (value > 0) {
-      // Green for positive returns
-      const intensity = Math.min(200, Math.floor(Math.abs(normalized) * 200));
-      return `rgb(${255-intensity}, 255, ${255-intensity})`;
+      // Green scale for positive returns
+      const intensity = Math.min(180, Math.floor(Math.abs(normalized) * 180));
+      return `rgb(${220-intensity}, ${255-Math.floor(intensity*0.3)}, ${220-intensity})`;
     } else {
-      // Red for negative returns  
-      const intensity = Math.min(200, Math.floor(Math.abs(normalized) * 200));
-      return `rgb(255, ${255-intensity}, ${255-intensity})`;
+      // Red scale for negative returns
+      const intensity = Math.min(180, Math.floor(Math.abs(normalized) * 180));
+      return `rgb(${255-Math.floor(intensity*0.3)}, ${220-intensity}, ${220-intensity})`;
     }
   };
   
-  const cellWidth = chartWidth / 12; // Evenly divide available width by 12 months
-  const cellHeight = chartHeight / Math.max(years.length, 1); // Evenly divide available height by number of years
-  
-  const cells = years.map((year, yearIndex) => {
+  // Generate cells for ALL year/month combinations
+  const cells = completeYears.map((year, yearIndex) => {
     return months.map((month, monthIndex) => {
-      const value = heatmapData[year] && heatmapData[year][month];
+      const value = heatmapData[year][month];
       const x = margin.left + monthIndex * cellWidth;
       const y = margin.top + yearIndex * cellHeight;
       const color = getColor(value);
       
-      // Add small padding between cells for better visual separation
       const cellPadding = 1;
       const actualCellWidth = cellWidth - cellPadding;
       const actualCellHeight = cellHeight - cellPadding;
@@ -1250,26 +1324,32 @@ function generateMonthlyHeatmapChart(returns, dates, title = 'Monthly Returns He
       return `<rect x="${x}" y="${y}" width="${actualCellWidth}" height="${actualCellHeight}" 
                     fill="${color}" stroke="white" stroke-width="0.5"/>
               ${value !== undefined ? 
-                `<text x="${x + cellWidth/2}" y="${y + cellHeight/2 + 3}" text-anchor="middle" 
-                       font-size="${Math.min(10, cellHeight/3)}" fill="black">${(value * 100).toFixed(1)}%</text>` : ''}`;
+                `<text x="${x + cellWidth/2}" y="${y + cellHeight/2 + 4}" text-anchor="middle" 
+                       font-size="10" fill="#333" font-weight="500">${(value * 100).toFixed(1)}%</text>` : 
+                `<text x="${x + cellWidth/2}" y="${y + cellHeight/2 + 2}" text-anchor="middle" 
+                       font-size="8" fill="#999">—</text>`}`;
     }).join('');
   }).join('');
   
-  // Month labels - positioned higher to use the extra top space
+  // Month labels
   const monthLabels = monthNames.map((name, index) => {
     const x = margin.left + index * cellWidth + cellWidth/2;
-    return `<text x="${x}" y="${margin.top - 20}" text-anchor="middle" font-size="11" fill="#666" font-weight="500">${name}</text>`;
+    return `<text x="${x}" y="${margin.top - 25}" text-anchor="middle" font-size="12" fill="#555" font-weight="600">${name}</text>`;
   }).join('');
   
   // Year labels
-  const yearLabels = years.map((year, index) => {
+  const yearLabels = completeYears.map((year, index) => {
     const y = margin.top + index * cellHeight + cellHeight/2 + 4;
-    return `<text x="${margin.left - 15}" y="${y}" text-anchor="end" font-size="11" fill="#666" font-weight="500">${year}</text>`;
+    return `<text x="${margin.left - 20}" y="${y}" text-anchor="end" font-size="12" fill="#555" font-weight="600">${year}</text>`;
   }).join('');
   
-  return `<svg width="100%" height="100%" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">
+  return `<svg width="100%" height="100%" viewBox="0 0 ${totalWidth} ${totalHeight}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">
     <!-- Background -->
-    <rect width="${width}" height="${height}" fill="white"/>
+    <rect width="${totalWidth}" height="${totalHeight}" fill="white"/>
+    
+    <!-- Chart area background -->
+    <rect x="${margin.left-5}" y="${margin.top-5}" width="${chartWidth+10}" height="${chartHeight+10}" 
+          fill="#fafafa" stroke="#e0e0e0" stroke-width="1" rx="4"/>
     
     <!-- Cells -->
     ${cells}
@@ -1279,7 +1359,16 @@ function generateMonthlyHeatmapChart(returns, dates, title = 'Monthly Returns He
     ${yearLabels}
     
     <!-- Title -->
-    <text x="${width/2}" y="30" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    <text x="${totalWidth/2}" y="30" text-anchor="middle" font-size="16" font-weight="600" fill="#333">${title}</text>
+    
+    <!-- Legend -->
+    <g transform="translate(${totalWidth - 200}, ${totalHeight - 45})">
+      <text x="0" y="0" font-size="10" fill="#666">Negative</text>
+      <rect x="45" y="-8" width="15" height="12" fill="${getColor(minValue)}" stroke="#ccc" stroke-width="0.5"/>
+      <rect x="65" y="-8" width="15" height="12" fill="${getColor(0)}" stroke="#ccc" stroke-width="0.5"/>
+      <rect x="85" y="-8" width="15" height="12" fill="${getColor(maxValue)}" stroke="#ccc" stroke-width="0.5"/>
+      <text x="105" y="0" font-size="10" fill="#666">Positive</text>
+    </g>
   </svg>`;
 }
 
@@ -1943,19 +2032,22 @@ export function calculateComprehensiveMetrics(returns, rfRate = 0.02, mode = 'ba
       try {
         const psr = stats.probabilisticSharpeRatio(cleanReturns, 0, 252, false);
         metrics['Prob. Sharpe Ratio %'] = (psr * pct).toFixed(2) + '%';
-        metrics['Smart Sharpe'] = sharpe.toFixed(2); // Placeholder
+        const smartSharpeValue = stats.smartSharpe(cleanReturns, rfRate, 252, false);
+        metrics['Smart Sharpe'] = smartSharpeValue.toFixed(2);
       } catch (psrError) {
         console.warn('PSR calculation failed:', psrError.message);
         metrics['Prob. Sharpe Ratio %'] = null;
-        metrics['Smart Sharpe'] = sharpe.toFixed(2);
+        const smartSharpeValue = stats.smartSharpe(cleanReturns, rfRate, 252, false);
+        metrics['Smart Sharpe'] = smartSharpeValue.toFixed(2);
       }
     }
     
     metrics['Sortino'] = sortino.toFixed(2);
     
     if (mode.toLowerCase() === 'full') {
-      metrics['Smart Sortino'] = sortino.toFixed(2); // Placeholder
-      metrics['Sortino/√2'] = (sortino / Math.sqrt(2)).toFixed(2);
+      const smartSortinoValue = stats.smartSortino(cleanReturns, rfRate, 252, false);
+      metrics['Smart Sortino'] = smartSortinoValue.toFixed(2);
+      metrics['Sortino/√2'] = (smartSortinoValue / Math.sqrt(2)).toFixed(2);
     }
     
     metrics['Volatility (ann.) %'] = (volatility * pct).toFixed(2) + '%';
