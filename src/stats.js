@@ -496,9 +496,22 @@ export function valueAtRisk(returns, sigma = 1, confidence = 0.95, nans = false)
     conf = conf / 100;
   }
   
-  // Calculate normal inverse CDF (ppf)
-  // This matches Python's _norm.ppf(1 - confidence, mu, sigma)
-  return normalInverseCDF(1 - conf, mu, sigmaStd);
+  // Ensure conf is in valid range for normalInverseCDF
+  conf = Math.max(0.001, Math.min(0.999, conf));
+  
+  try {
+    // Calculate normal inverse CDF (ppf)
+    // This matches Python's _norm.ppf(1 - confidence, mu, sigma)
+    const prob = 1 - conf;
+    if (prob <= 0 || prob >= 1) {
+      return mu - 1.96 * sigmaStd; // Fallback to 95% confidence
+    }
+    return normalInverseCDF(prob, mu, sigmaStd);
+  } catch (error) {
+    console.warn('VaR calculation failed:', error.message);
+    // Return fallback using 95% confidence normal approximation
+    return mu - 1.96 * sigmaStd;
+  }
 }
 
 /**

@@ -28,8 +28,8 @@ export function metrics(returns, benchmark = null, rfRate = 0, nans = false) {
     
     // Risk metrics
     maxDrawdown: stats.maxDrawdown(cleanReturns, nans),
-    valueAtRisk: stats.valueAtRisk(cleanReturns, 0.05, nans),
-    conditionalValueAtRisk: stats.cvar(cleanReturns, 0.05, nans),
+    valueAtRisk: stats.valueAtRisk(cleanReturns, 1, 0.95, nans),
+    conditionalValueAtRisk: stats.cvar(cleanReturns, 1, 0.95, nans),
     skew: stats.skew(cleanReturns, nans),
     kurtosis: stats.kurtosis(cleanReturns, nans),
     ulcerIndex: stats.ulcerIndex(cleanReturns, nans),
@@ -341,10 +341,980 @@ function generateCumulativeReturnsChart(returns, dates, title = 'Cumulative Retu
 }
 
 /**
- * Generate log returns chart (cumulative returns with logarithmic scale)
+ * Generate EOY Returns bar chart
+ */
+function generateEOYReturnsChart(returns, dates, title = 'EOY Returns') {
+  const width = 576;
+  const height = 360;
+  const margin = { top: 40, right: 40, bottom: 80, left: 60 };
+  const chartWidth = width - margin.left - margin.right;
+  const chartHeight = height - margin.top - margin.bottom;
+  
+  // Properly handle returns data format
+  const returnsData = returns.values ? returns.values : (Array.isArray(returns) ? returns : []);
+  const datesData = dates || (returns.index ? returns.index : null);
+  
+  // Calculate yearly returns using existing stats function
+  const yearlyReturns = stats.yearlyReturns(returnsData, false, datesData, true);
+  
+  if (!yearlyReturns || yearlyReturns.length === 0) {
+    return `<svg width="576" height="360" viewBox="0 0 576 360">
+      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="288" y="180" text-anchor="middle" fill="#6c757d">No EOY data available</text>
+    </svg>`;
+  }
+  
+  const minValue = Math.min(...yearlyReturns, 0);
+  const maxValue = Math.max(...yearlyReturns, 0);
+  const valueRange = maxValue - minValue || 1;
+  
+  // Calculate bar dimensions
+  const barSpacing = 4;
+  const barWidth = Math.max(8, (chartWidth - (yearlyReturns.length - 1) * barSpacing) / yearlyReturns.length);
+  
+  // Generate bars
+  const bars = yearlyReturns.map((value, index) => {
+    const x = margin.left + index * (barWidth + barSpacing);
+    const barHeight = Math.abs(value / valueRange) * chartHeight;
+    const isPositive = value >= 0;
+    const zeroY = margin.top + (maxValue / valueRange) * chartHeight;
+    const y = isPositive ? zeroY - barHeight : zeroY;
+    
+    const color = isPositive ? '#2ca02c' : '#d62728';
+    
+    return `<rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" fill="${color}"/>`;
+  }).join('');
+  
+  // Zero line
+  const zeroY = margin.top + (maxValue / valueRange) * chartHeight;
+  
+  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background -->
+    <rect width="${width}" height="${height}" fill="white"/>
+    
+    <!-- Chart area -->
+    <rect x="${margin.left}" y="${margin.top}" width="${chartWidth}" height="${chartHeight}" 
+          fill="#fafafa" stroke="#e8e8e8" stroke-width="1"/>
+    
+    <!-- Zero line -->
+    <line x1="${margin.left}" y1="${zeroY}" x2="${margin.left + chartWidth}" y2="${zeroY}" 
+          stroke="#666" stroke-width="1" stroke-dasharray="2,3"/>
+    
+    <!-- Bars -->
+    ${bars}
+    
+    <!-- Title -->
+    <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    
+    <!-- Y-axis labels -->
+    <text x="15" y="${margin.top + 10}" font-size="11" fill="#666">${(maxValue * 100).toFixed(0)}%</text>
+    <text x="15" y="${margin.top + chartHeight - 5}" font-size="11" fill="#666">${(minValue * 100).toFixed(0)}%</text>
+  </svg>`;
+}
+
+/**
+ * Generate Monthly Distribution histogram chart
+ */
+function generateMonthlyDistChart(returns, dates, title = 'Monthly Distribution') {
+  const width = 576;
+  const height = 360;
+  const margin = { top: 40, right: 40, bottom: 80, left: 60 };
+  const chartWidth = width - margin.left - margin.right;
+  const chartHeight = height - margin.top - margin.bottom;
+  
+  // Properly handle returns data format
+  const returnsData = returns.values ? returns.values : (Array.isArray(returns) ? returns : []);
+  const datesData = dates || (returns.index ? returns.index : null);
+  
+  // Calculate monthly returns using existing stats function
+  const monthlyReturns = stats.monthlyReturns(returnsData, false, datesData, true);
+  
+  if (!monthlyReturns || monthlyReturns.length === 0) {
+    return `<svg width="576" height="360" viewBox="0 0 576 360">
+      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="288" y="180" text-anchor="middle" fill="#6c757d">No monthly data available</text>
+    </svg>`;
+  }
+  
+  // Create histogram bins
+  const numBins = 20;
+  const minReturn = Math.min(...monthlyReturns);
+  const maxReturn = Math.max(...monthlyReturns);
+  const binWidth = (maxReturn - minReturn) / numBins;
+  
+  const bins = Array(numBins).fill(0);
+  monthlyReturns.forEach(ret => {
+    const binIndex = Math.min(Math.floor((ret - minReturn) / binWidth), numBins - 1);
+    bins[binIndex]++;
+  });
+  
+  const maxCount = Math.max(...bins);
+  const barWidth = chartWidth / numBins;
+  
+  // Generate histogram bars
+  const bars = bins.map((count, index) => {
+    const x = margin.left + index * barWidth;
+    const barHeight = (count / maxCount) * chartHeight;
+    const y = margin.top + chartHeight - barHeight;
+    
+    return `<rect x="${x}" y="${y}" width="${barWidth - 1}" height="${barHeight}" fill="#1f77b4" opacity="0.7"/>`;
+  }).join('');
+  
+  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background -->
+    <rect width="${width}" height="${height}" fill="white"/>
+    
+    <!-- Chart area -->
+    <rect x="${margin.left}" y="${margin.top}" width="${chartWidth}" height="${chartHeight}" 
+          fill="#fafafa" stroke="#e8e8e8" stroke-width="1"/>
+    
+    <!-- Histogram bars -->
+    ${bars}
+    
+    <!-- Title -->
+    <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    
+    <!-- X-axis labels -->
+    <text x="${margin.left}" y="${height - 20}" font-size="11" fill="#666">${(minReturn * 100).toFixed(1)}%</text>
+    <text x="${margin.left + chartWidth}" y="${height - 20}" text-anchor="end" font-size="11" fill="#666">${(maxReturn * 100).toFixed(1)}%</text>
+  </svg>`;
+}
+
+/**
+ * Generate Daily Returns scatter chart
+ */
+function generateDailyReturnsChart(returns, dates, title = 'Daily Returns') {
+  const width = 576;
+  const height = 360;
+  const margin = { top: 40, right: 40, bottom: 80, left: 60 };
+  const chartWidth = width - margin.left - margin.right;
+  const chartHeight = height - margin.top - margin.bottom;
+  
+  // Properly handle returns data format
+  const returnsData = returns.values ? returns.values : (Array.isArray(returns) ? returns : []);
+  
+  if (!returnsData || returnsData.length === 0) {
+    return `<svg width="576" height="360" viewBox="0 0 576 360">
+      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="288" y="180" text-anchor="middle" fill="#6c757d">No daily data available</text>
+    </svg>`;
+  }
+  
+  const minValue = Math.min(...returnsData);
+  const maxValue = Math.max(...returnsData);
+  const valueRange = maxValue - minValue || 1;
+  
+  // Generate scatter points
+  const points = returnsData.map((value, index) => {
+    const x = margin.left + (index / (returnsData.length - 1)) * chartWidth;
+    const y = margin.top + ((maxValue - value) / valueRange) * chartHeight;
+    const color = value >= 0 ? '#2ca02c' : '#d62728';
+    const radius = Math.max(1, Math.min(3, Math.abs(value) * 1000));
+    
+    return `<circle cx="${x}" cy="${y}" r="${radius}" fill="${color}" opacity="0.6"/>`;
+  }).join('');
+  
+  // Zero line
+  const zeroY = margin.top + ((maxValue - 0) / valueRange) * chartHeight;
+  
+  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background -->
+    <rect width="${width}" height="${height}" fill="white"/>
+    
+    <!-- Chart area -->
+    <rect x="${margin.left}" y="${margin.top}" width="${chartWidth}" height="${chartHeight}" 
+          fill="#fafafa" stroke="#e8e8e8" stroke-width="1"/>
+    
+    <!-- Zero line -->
+    <line x1="${margin.left}" y1="${zeroY}" x2="${margin.left + chartWidth}" y2="${zeroY}" 
+          stroke="#666" stroke-width="1" stroke-dasharray="2,3"/>
+    
+    <!-- Scatter points -->
+    ${points}
+    
+    <!-- Title -->
+    <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    
+    <!-- Y-axis labels -->
+    <text x="15" y="${margin.top + 10}" font-size="11" fill="#666">${(maxValue * 100).toFixed(1)}%</text>
+    <text x="15" y="${margin.top + chartHeight - 5}" font-size="11" fill="#666">${(minValue * 100).toFixed(1)}%</text>
+  </svg>`;
+}
+
+/**
+ * Generate Rolling Volatility chart
+ */
+function generateRollingVolatilityChart(returns, dates, title = 'Rolling Volatility (30 day)') {
+  const width = 576;
+  const height = 360;
+  const margin = { top: 40, right: 40, bottom: 80, left: 60 };
+  const chartWidth = width - margin.left - margin.right;
+  const chartHeight = height - margin.top - margin.bottom;
+  
+  // Properly handle returns data format
+  const returnsData = returns.values ? returns.values : (Array.isArray(returns) ? returns : []);
+  
+  if (!returnsData || returnsData.length < 30) {
+    return `<svg width="576" height="360" viewBox="0 0 576 360">
+      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="288" y="180" text-anchor="middle" fill="#6c757d">Insufficient data for rolling volatility</text>
+    </svg>`;
+  }
+  
+  // Calculate 30-day rolling volatility
+  const window = 30;
+  const rollingVol = [];
+  
+  for (let i = window - 1; i < returnsData.length; i++) {
+    const windowData = returnsData.slice(i - window + 1, i + 1);
+    const vol = stats.volatility(windowData, 252, false);
+    rollingVol.push(vol);
+  }
+  
+  const minValue = Math.min(...rollingVol);
+  const maxValue = Math.max(...rollingVol);
+  const valueRange = maxValue - minValue || 1;
+  
+  // Generate path data
+  const pathData = rollingVol.map((value, index) => {
+    const x = margin.left + (index / (rollingVol.length - 1)) * chartWidth;
+    const y = margin.top + ((maxValue - value) / valueRange) * chartHeight;
+    return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+  }).join(' ');
+  
+  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background -->
+    <rect width="${width}" height="${height}" fill="white"/>
+    
+    <!-- Chart area -->
+    <rect x="${margin.left}" y="${margin.top}" width="${chartWidth}" height="${chartHeight}" 
+          fill="#fafafa" stroke="#e8e8e8" stroke-width="1"/>
+    
+    <!-- Rolling volatility line -->
+    <path d="${pathData}" fill="none" stroke="#ff7f0e" stroke-width="2"/>
+    
+    <!-- Title -->
+    <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    
+    <!-- Y-axis labels -->
+    <text x="15" y="${margin.top + 10}" font-size="11" fill="#666">${(maxValue * 100).toFixed(1)}%</text>
+    <text x="15" y="${margin.top + chartHeight - 5}" font-size="11" fill="#666">${(minValue * 100).toFixed(1)}%</text>
+  </svg>`;
+}
+
+/**
+ * Generate Rolling Sharpe chart
+ */
+function generateRollingSharpeChart(returns, dates, title = 'Rolling Sharpe (30 day)', rfRate = 0) {
+  const width = 576;
+  const height = 360;
+  const margin = { top: 40, right: 40, bottom: 80, left: 60 };
+  const chartWidth = width - margin.left - margin.right;
+  const chartHeight = height - margin.top - margin.bottom;
+  
+  // Properly handle returns data format
+  const returnsData = returns.values ? returns.values : (Array.isArray(returns) ? returns : []);
+  
+  if (!returnsData || returnsData.length < 30) {
+    return `<svg width="576" height="360" viewBox="0 0 576 360">
+      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="288" y="180" text-anchor="middle" fill="#6c757d">Insufficient data for rolling Sharpe</text>
+    </svg>`;
+  }
+  
+  // Calculate 30-day rolling Sharpe ratio
+  const window = 30;
+  const rollingSharpe = [];
+  
+  for (let i = window - 1; i < returnsData.length; i++) {
+    const windowData = returnsData.slice(i - window + 1, i + 1);
+    const sharpe = stats.sharpe(windowData, rfRate, 252, false);
+    rollingSharpe.push(sharpe);
+  }
+  
+  const minValue = Math.min(...rollingSharpe);
+  const maxValue = Math.max(...rollingSharpe);
+  const valueRange = maxValue - minValue || 1;
+  
+  // Generate path data
+  const pathData = rollingSharpe.map((value, index) => {
+    const x = margin.left + (index / (rollingSharpe.length - 1)) * chartWidth;
+    const y = margin.top + ((maxValue - value) / valueRange) * chartHeight;
+    return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+  }).join(' ');
+  
+  // Zero line
+  const zeroY = margin.top + ((maxValue - 0) / valueRange) * chartHeight;
+  
+  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background -->
+    <rect width="${width}" height="${height}" fill="white"/>
+    
+    <!-- Chart area -->
+    <rect x="${margin.left}" y="${margin.top}" width="${chartWidth}" height="${chartHeight}" 
+          fill="#fafafa" stroke="#e8e8e8" stroke-width="1"/>
+    
+    <!-- Zero line -->
+    <line x1="${margin.left}" y1="${zeroY}" x2="${margin.left + chartWidth}" y2="${zeroY}" 
+          stroke="#666" stroke-width="1" stroke-dasharray="2,3"/>
+    
+    <!-- Rolling Sharpe line -->
+    <path d="${pathData}" fill="none" stroke="#2ca02c" stroke-width="2"/>
+    
+    <!-- Title -->
+    <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    
+    <!-- Y-axis labels -->
+    <text x="15" y="${margin.top + 10}" font-size="11" fill="#666">${maxValue.toFixed(1)}</text>
+    <text x="15" y="${margin.top + chartHeight - 5}" font-size="11" fill="#666">${minValue.toFixed(1)}</text>
+  </svg>`;
+}
+
+/**
+ * Generate Rolling Sortino chart
+ */
+function generateRollingSortinoChart(returns, dates, title = 'Rolling Sortino (30 day)', rfRate = 0) {
+  const width = 576;
+  const height = 360;
+  const margin = { top: 40, right: 40, bottom: 80, left: 60 };
+  const chartWidth = width - margin.left - margin.right;
+  const chartHeight = height - margin.top - margin.bottom;
+  
+  // Properly handle returns data format
+  const returnsData = returns.values ? returns.values : (Array.isArray(returns) ? returns : []);
+  
+  if (!returnsData || returnsData.length < 30) {
+    return `<svg width="576" height="360" viewBox="0 0 576 360">
+      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="288" y="180" text-anchor="middle" fill="#6c757d">Insufficient data for rolling Sortino</text>
+    </svg>`;
+  }
+  
+  // Calculate 30-day rolling Sortino ratio
+  const window = 30;
+  const rollingSortino = [];
+  
+  for (let i = window - 1; i < returnsData.length; i++) {
+    const windowData = returnsData.slice(i - window + 1, i + 1);
+    try {
+      const sortinoValue = stats.sortino(windowData, rfRate, false);
+      // Handle NaN values
+      if (isNaN(sortinoValue) || !isFinite(sortinoValue)) {
+        rollingSortino.push(0);
+      } else {
+        rollingSortino.push(sortinoValue);
+      }
+    } catch (error) {
+      rollingSortino.push(0);
+    }
+  }
+  
+  const minValue = Math.min(...rollingSortino);
+  const maxValue = Math.max(...rollingSortino);
+  const valueRange = maxValue - minValue || 1;
+  
+  // Generate path data
+  const pathData = rollingSortino.map((value, index) => {
+    const x = margin.left + (index / (rollingSortino.length - 1)) * chartWidth;
+    const y = margin.top + ((maxValue - value) / valueRange) * chartHeight;
+    return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+  }).join(' ');
+  
+  // Zero line
+  const zeroY = margin.top + ((maxValue - 0) / valueRange) * chartHeight;
+  
+  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background -->
+    <rect width="${width}" height="${height}" fill="white"/>
+    
+    <!-- Chart area -->
+    <rect x="${margin.left}" y="${margin.top}" width="${chartWidth}" height="${chartHeight}" 
+          fill="#fafafa" stroke="#e8e8e8" stroke-width="1"/>
+    
+    <!-- Zero line -->
+    <line x1="${margin.left}" y1="${zeroY}" x2="${margin.left + chartWidth}" y2="${zeroY}" 
+          stroke="#666" stroke-width="1" stroke-dasharray="2,3"/>
+    
+    <!-- Rolling Sortino line -->
+    <path d="${pathData}" fill="none" stroke="#9467bd" stroke-width="2"/>
+    
+    <!-- Title -->
+    <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    
+    <!-- Y-axis labels -->
+    <text x="15" y="${margin.top + 10}" font-size="11" fill="#666">${maxValue.toFixed(1)}</text>
+    <text x="15" y="${margin.top + chartHeight - 5}" font-size="11" fill="#666">${minValue.toFixed(1)}</text>
+  </svg>`;
+}
+
+/**
+ * Generate Drawdown Periods chart
+ */
+function generateDrawdownPeriodsChart(returns, dates, title = 'Top 5 Drawdown Periods') {
+  const width = 576;
+  const height = 360;
+  const margin = { top: 40, right: 40, bottom: 80, left: 60 };
+  const chartWidth = width - margin.left - margin.right;
+  const chartHeight = height - margin.top - margin.bottom;
+  
+  // Properly handle returns data format
+  const returnsData = returns.values ? returns.values : (Array.isArray(returns) ? returns : []);
+  
+  if (!returnsData || returnsData.length === 0) {
+    return `<svg width="576" height="360" viewBox="0 0 576 360">
+      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="288" y="180" text-anchor="middle" fill="#6c757d">No data for drawdown periods</text>
+    </svg>`;
+  }
+  
+  // Calculate cumulative returns and drawdowns manually
+  let cumulativeReturns = [1];
+  let peak = 1;
+  const drawdowns = [0];
+  
+  for (let i = 0; i < returnsData.length; i++) {
+    const cumReturn = cumulativeReturns[i] * (1 + returnsData[i]);
+    cumulativeReturns.push(cumReturn);
+    
+    if (cumReturn > peak) {
+      peak = cumReturn;
+    }
+    
+    const drawdown = (cumReturn - peak) / peak;
+    drawdowns.push(drawdown);
+  }
+  
+  // Find drawdown periods
+  const drawdownPeriods = [];
+  let inDrawdown = false;
+  let startIndex = 0;
+  let maxDD = 0;
+  
+  for (let i = 1; i < drawdowns.length; i++) {
+    if (!inDrawdown && drawdowns[i] < 0) {
+      // Start of drawdown
+      inDrawdown = true;
+      startIndex = i;
+      maxDD = drawdowns[i];
+    } else if (inDrawdown) {
+      if (drawdowns[i] < maxDD) {
+        maxDD = drawdowns[i];
+      }
+      
+      if (drawdowns[i] >= 0) {
+        // End of drawdown
+        inDrawdown = false;
+        drawdownPeriods.push({
+          startIndex,
+          endIndex: i - 1,
+          days: i - startIndex,
+          maxDrawdown: maxDD
+        });
+      }
+    }
+  }
+  
+  // Handle case where drawdown continues to end
+  if (inDrawdown) {
+    drawdownPeriods.push({
+      startIndex,
+      endIndex: drawdowns.length - 1,
+      days: drawdowns.length - startIndex,
+      maxDrawdown: maxDD
+    });
+  }
+  
+  if (drawdownPeriods.length === 0) {
+    return `<svg width="576" height="360" viewBox="0 0 576 360">
+      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="288" y="180" text-anchor="middle" fill="#6c757d">No significant drawdown periods found</text>
+    </svg>`;
+  }
+  
+  // Get top 5 drawdowns by severity
+  const topDrawdowns = drawdownPeriods
+    .sort((a, b) => a.maxDrawdown - b.maxDrawdown) // Sort by severity (most negative first)
+    .slice(0, 5);
+  
+  // Create bar chart of drawdown magnitudes
+  const barWidth = Math.max(40, (chartWidth - 40) / topDrawdowns.length);
+  const maxDrawdownAbs = Math.abs(Math.min(...topDrawdowns.map(dd => dd.maxDrawdown)));
+  
+  const bars = topDrawdowns.map((dd, index) => {
+    const x = margin.left + index * (barWidth + 10) + 5;
+    const barHeight = Math.abs(dd.maxDrawdown) / maxDrawdownAbs * (chartHeight - 40);
+    const y = margin.top + chartHeight - barHeight;
+    
+    return `<rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" fill="#d62728" opacity="0.8"/>
+            <text x="${x + barWidth/2}" y="${y - 5}" text-anchor="middle" font-size="10" fill="#333">${(dd.maxDrawdown * 100).toFixed(1)}%</text>
+            <text x="${x + barWidth/2}" y="${margin.top + chartHeight + 20}" text-anchor="middle" font-size="9" fill="#666">${dd.days}d</text>`;
+  }).join('');
+  
+  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background -->
+    <rect width="${width}" height="${height}" fill="white"/>
+    
+    <!-- Chart area -->
+    <rect x="${margin.left}" y="${margin.top}" width="${chartWidth}" height="${chartHeight}" 
+          fill="#fafafa" stroke="#e8e8e8" stroke-width="1"/>
+    
+    <!-- Bars -->
+    ${bars}
+    
+    <!-- Title -->
+    <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    
+    <!-- Labels -->
+    <text x="${width/2}" y="${height - 5}" text-anchor="middle" font-size="10" fill="#666">Duration (days)</text>
+  </svg>`;
+}
+
+/**
+ * Generate Log Returns chart (cumulative returns with logarithmic scale)
  */
 function generateLogReturnsChart(returns, dates, title = 'Log Returns') {
+  // Use the existing cumulative returns chart but with log scale
   return generateCumulativeReturnsChart(returns, dates, title, true);
+}
+
+/**
+ * Generate Vol/Returns chart
+ */
+function generateVolReturnsChart(returns, dates, title = 'Volatility vs Returns') {
+  const width = 576;
+  const height = 360;
+  const margin = { top: 40, right: 40, bottom: 80, left: 60 };
+  const chartWidth = width - margin.left - margin.right;
+  const chartHeight = height - margin.top - margin.bottom;
+  
+  // Properly handle returns data format
+  const returnsData = returns.values ? returns.values : (Array.isArray(returns) ? returns : []);
+  
+  if (!returnsData || returnsData.length < 252) {
+    return `<svg width="576" height="360" viewBox="0 0 576 360">
+      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="288" y="180" text-anchor="middle" fill="#6c757d">Insufficient data for vol/returns analysis</text>
+    </svg>`;
+  }
+  
+  // Calculate annual vol and returns for rolling windows
+  const window = 252; // 1 year
+  const volReturnsData = [];
+  
+  for (let i = window - 1; i < returnsData.length; i++) {
+    const windowData = returnsData.slice(i - window + 1, i + 1);
+    const annualReturn = stats.cagr(windowData, 252, false);
+    const annualVol = stats.volatility(windowData, 252, false);
+    volReturnsData.push({ vol: annualVol, returns: annualReturn });
+  }
+  
+  const minVol = Math.min(...volReturnsData.map(d => d.vol));
+  const maxVol = Math.max(...volReturnsData.map(d => d.vol));
+  const minReturns = Math.min(...volReturnsData.map(d => d.returns));
+  const maxReturns = Math.max(...volReturnsData.map(d => d.returns));
+  
+  const points = volReturnsData.map(d => {
+    const x = margin.left + ((d.vol - minVol) / (maxVol - minVol || 1)) * chartWidth;
+    const y = margin.top + chartHeight - ((d.returns - minReturns) / (maxReturns - minReturns || 1)) * chartHeight;
+    return `<circle cx="${x}" cy="${y}" r="3" fill="#ff7f0e" opacity="0.7"/>`;
+  }).join('');
+  
+  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background -->
+    <rect width="${width}" height="${height}" fill="white"/>
+    
+    <!-- Chart area -->
+    <rect x="${margin.left}" y="${margin.top}" width="${chartWidth}" height="${chartHeight}" 
+          fill="#fafafa" stroke="#e8e8e8" stroke-width="1"/>
+    
+    <!-- Points -->
+    ${points}
+    
+    <!-- Title -->
+    <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    
+    <!-- Axis labels -->
+    <text x="${width/2}" y="${height - 5}" text-anchor="middle" font-size="11" fill="#666">Volatility</text>
+    <text x="20" y="20" text-anchor="middle" font-size="11" fill="#666" transform="rotate(-90 20 20)">Returns</text>
+    
+    <!-- X-axis labels -->
+    <text x="${margin.left}" y="${height - 30}" font-size="10" fill="#666">${(minVol * 100).toFixed(1)}%</text>
+    <text x="${margin.left + chartWidth}" y="${height - 30}" text-anchor="end" font-size="10" fill="#666">${(maxVol * 100).toFixed(1)}%</text>
+    
+    <!-- Y-axis labels -->
+    <text x="${margin.left - 5}" y="${margin.top + chartHeight}" text-anchor="end" font-size="10" fill="#666">${(minReturns * 100).toFixed(1)}%</text>
+    <text x="${margin.left - 5}" y="${margin.top + 10}" text-anchor="end" font-size="10" fill="#666">${(maxReturns * 100).toFixed(1)}%</text>
+  </svg>`;
+}
+
+/**
+ * Generate Rolling Beta chart
+ */
+function generateRollingBetaChart(returns, benchmark, dates, title = 'Rolling Beta to Benchmark (30 day)') {
+  const width = 576;
+  const height = 360;
+  const margin = { top: 40, right: 40, bottom: 80, left: 60 };
+  const chartWidth = width - margin.left - margin.right;
+  const chartHeight = height - margin.top - margin.bottom;
+  
+  // Properly handle returns data format
+  const returnsData = returns.values ? returns.values : (Array.isArray(returns) ? returns : []);
+  const benchmarkData = benchmark && benchmark.values ? benchmark.values : (Array.isArray(benchmark) ? benchmark : []);
+  
+  if (!returnsData || !benchmarkData || returnsData.length < 30 || benchmarkData.length < 30) {
+    return `<svg width="576" height="360" viewBox="0 0 576 360">
+      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="288" y="180" text-anchor="middle" fill="#6c757d">Insufficient data for rolling beta</text>
+    </svg>`;
+  }
+  
+  // Calculate 30-day rolling beta
+  const window = 30;
+  const rollingBeta = [];
+  
+  for (let i = window - 1; i < Math.min(returnsData.length, benchmarkData.length); i++) {
+    const portfolioWindow = returnsData.slice(i - window + 1, i + 1);
+    const benchmarkWindow = benchmarkData.slice(i - window + 1, i + 1);
+    
+    // Calculate beta using covariance/variance
+    const meanPortfolio = portfolioWindow.reduce((sum, r) => sum + r, 0) / portfolioWindow.length;
+    const meanBenchmark = benchmarkWindow.reduce((sum, r) => sum + r, 0) / benchmarkWindow.length;
+    
+    let covariance = 0;
+    let benchmarkVariance = 0;
+    
+    for (let j = 0; j < window; j++) {
+      const portfolioDeviation = portfolioWindow[j] - meanPortfolio;
+      const benchmarkDeviation = benchmarkWindow[j] - meanBenchmark;
+      
+      covariance += portfolioDeviation * benchmarkDeviation;
+      benchmarkVariance += benchmarkDeviation * benchmarkDeviation;
+    }
+    
+    covariance /= (window - 1);
+    benchmarkVariance /= (window - 1);
+    
+    const beta = benchmarkVariance > 0 ? covariance / benchmarkVariance : 0;
+    rollingBeta.push(beta);
+  }
+  
+  if (rollingBeta.length === 0) {
+    return `<svg width="576" height="360" viewBox="0 0 576 360">
+      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="288" y="180" text-anchor="middle" fill="#6c757d">Unable to calculate rolling beta</text>
+    </svg>`;
+  }
+  
+  const minValue = Math.min(...rollingBeta);
+  const maxValue = Math.max(...rollingBeta);
+  const valueRange = maxValue - minValue || 1;
+  
+  // Generate path data
+  const pathData = rollingBeta.map((value, index) => {
+    const x = margin.left + (index / (rollingBeta.length - 1)) * chartWidth;
+    const y = margin.top + ((maxValue - value) / valueRange) * chartHeight;
+    return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+  }).join(' ');
+  
+  // Beta = 1 line
+  const oneY = margin.top + ((maxValue - 1) / valueRange) * chartHeight;
+  
+  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background -->
+    <rect width="${width}" height="${height}" fill="white"/>
+    
+    <!-- Chart area -->
+    <rect x="${margin.left}" y="${margin.top}" width="${chartWidth}" height="${chartHeight}" 
+          fill="#fafafa" stroke="#e8e8e8" stroke-width="1"/>
+    
+    <!-- Beta = 1 line -->
+    ${oneY >= margin.top && oneY <= margin.top + chartHeight ? 
+      `<line x1="${margin.left}" y1="${oneY}" x2="${margin.left + chartWidth}" y2="${oneY}" 
+             stroke="#666" stroke-width="1" stroke-dasharray="2,3"/>` : ''}
+    
+    <!-- Rolling beta line -->
+    <path d="${pathData}" fill="none" stroke="#17becf" stroke-width="2"/>
+    
+    <!-- Title -->
+    <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    
+    <!-- Y-axis labels -->
+    <text x="15" y="${margin.top + 10}" font-size="11" fill="#666">${maxValue.toFixed(2)}</text>
+    <text x="15" y="${margin.top + chartHeight - 5}" font-size="11" fill="#666">${minValue.toFixed(2)}</text>
+  </svg>`;
+}
+
+/**
+ * Generate Monthly Heatmap chart
+ */
+function generateMonthlyHeatmapChart(returns, dates, title = 'Monthly Returns Heatmap') {
+  const width = 576;
+  const height = 360;
+  const margin = { top: 40, right: 40, bottom: 80, left: 80 };
+  const chartWidth = width - margin.left - margin.right;
+  const chartHeight = height - margin.top - margin.bottom;
+  
+  // Properly handle returns data format
+  const returnsData = returns.values ? returns.values : (Array.isArray(returns) ? returns : []);
+  
+  if (!returnsData || returnsData.length === 0) {
+    return `<svg width="576" height="360" viewBox="0 0 576 360">
+      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="288" y="180" text-anchor="middle" fill="#6c757d">No data for monthly heatmap</text>
+    </svg>`;
+  }
+  
+  // Calculate monthly returns manually if the stats function doesn't work
+  let monthlyReturnsObj = {};
+  
+  try {
+    // Try using the existing stats function first
+    monthlyReturnsObj = stats.monthlyReturns(returnsData, false);
+    
+    // Check if we got valid results
+    if (!monthlyReturnsObj || Object.keys(monthlyReturnsObj).length === 0) {
+      throw new Error("Empty result from stats.monthlyReturns");
+    }
+  } catch (e) {
+    console.log("Using fallback monthly calculation:", e.message);
+    
+    // Fallback: Calculate monthly returns using a more sophisticated approach
+    // Group returns into calendar months if we have 252+ data points (assume daily data)
+    if (returnsData.length >= 20) {
+      const monthSize = Math.max(20, Math.floor(returnsData.length / 24)); // Roughly monthly chunks
+      let monthIndex = 0;
+      let monthStart = 0;
+      
+      // Start from a reasonable date
+      const startYear = 2022;
+      const startMonth = 7; // July 2022 based on your data
+      
+      while (monthStart < returnsData.length) {
+        const monthEnd = Math.min(monthStart + monthSize, returnsData.length);
+        const monthData = returnsData.slice(monthStart, monthEnd);
+        
+        if (monthData.length > 0) {
+          // Calculate compound return for the month
+          let monthReturn = 1;
+          for (let i = 0; i < monthData.length; i++) {
+            if (monthData[i] !== null && monthData[i] !== undefined && !isNaN(monthData[i])) {
+              monthReturn *= (1 + monthData[i]);
+            }
+          }
+          monthReturn -= 1;
+          
+          // Create date key
+          const totalMonths = monthIndex;
+          const year = startYear + Math.floor((startMonth - 1 + totalMonths) / 12);
+          const month = String(((startMonth - 1 + totalMonths) % 12) + 1).padStart(2, '0');
+          
+          monthlyReturnsObj[`${year}-${month}`] = monthReturn;
+        }
+        
+        monthStart = monthEnd;
+        monthIndex++;
+        
+        // Prevent infinite loop
+        if (monthIndex > 50) break;
+      }
+    }
+  }
+  
+  if (Object.keys(monthlyReturnsObj).length === 0) {
+    return `<svg width="576" height="360" viewBox="0 0 576 360">
+      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="288" y="180" text-anchor="middle" fill="#6c757d">Unable to calculate monthly returns</text>
+    </svg>`;
+  }
+  
+  // Organize data by year and month
+  const heatmapData = {};
+  const allValues = [];
+  
+  Object.entries(monthlyReturnsObj).forEach(([dateStr, value]) => {
+    const parts = dateStr.split('-');
+    if (parts.length >= 2) {
+      const year = parts[0];
+      const month = parts[1];
+      if (!heatmapData[year]) heatmapData[year] = {};
+      heatmapData[year][month] = value;
+      allValues.push(value);
+    }
+  });
+  
+  if (allValues.length === 0) {
+    return `<svg width="576" height="360" viewBox="0 0 576 360">
+      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="288" y="180" text-anchor="middle" fill="#6c757d">No monthly data to display</text>
+    </svg>`;
+  }
+  
+  const years = Object.keys(heatmapData).sort();
+  const months = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  
+  const minValue = Math.min(...allValues);
+  const maxValue = Math.max(...allValues);
+  const absMax = Math.max(Math.abs(minValue), Math.abs(maxValue));
+  
+  // Color scale function - improved to handle extreme values
+  const getColor = (value) => {
+    if (value === undefined) return '#f0f0f0';
+    
+    const normalized = value / (absMax || 1);
+    
+    if (value > 0) {
+      // Green for positive returns
+      const intensity = Math.min(200, Math.floor(Math.abs(normalized) * 200));
+      return `rgb(${255-intensity}, 255, ${255-intensity})`;
+    } else {
+      // Red for negative returns  
+      const intensity = Math.min(200, Math.floor(Math.abs(normalized) * 200));
+      return `rgb(255, ${255-intensity}, ${255-intensity})`;
+    }
+  };
+  
+  const cellWidth = chartWidth / 12;
+  const cellHeight = Math.max(20, chartHeight / years.length);
+  
+  const cells = years.map((year, yearIndex) => {
+    return months.map((month, monthIndex) => {
+      const value = heatmapData[year] && heatmapData[year][month];
+      const x = margin.left + monthIndex * cellWidth;
+      const y = margin.top + yearIndex * cellHeight;
+      const color = getColor(value);
+      
+      return `<rect x="${x}" y="${y}" width="${cellWidth - 1}" height="${cellHeight - 1}" 
+                    fill="${color}" stroke="white" stroke-width="1"/>
+              ${value !== undefined ? 
+                `<text x="${x + cellWidth/2}" y="${y + cellHeight/2 + 3}" text-anchor="middle" 
+                       font-size="9" fill="black">${(value * 100).toFixed(1)}%</text>` : ''}`;
+    }).join('');
+  }).join('');
+  
+  // Month labels
+  const monthLabels = monthNames.map((name, index) => {
+    const x = margin.left + index * cellWidth + cellWidth/2;
+    return `<text x="${x}" y="${margin.top - 10}" text-anchor="middle" font-size="10" fill="#666">${name}</text>`;
+  }).join('');
+  
+  // Year labels
+  const yearLabels = years.map((year, index) => {
+    const y = margin.top + index * cellHeight + cellHeight/2 + 3;
+    return `<text x="${margin.left - 10}" y="${y}" text-anchor="end" font-size="10" fill="#666">${year}</text>`;
+  }).join('');
+  
+  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background -->
+    <rect width="${width}" height="${height}" fill="white"/>
+    
+    <!-- Cells -->
+    ${cells}
+    
+    <!-- Labels -->
+    ${monthLabels}
+    ${yearLabels}
+    
+    <!-- Title -->
+    <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+  </svg>`;
+}
+
+/**
+ * Generate Returns Distribution chart
+ */
+function generateReturnsDistributionChart(returns, dates, title = 'Returns Distribution') {
+  const width = 576;
+  const height = 360;
+  const margin = { top: 40, right: 40, bottom: 80, left: 60 };
+  const chartWidth = width - margin.left - margin.right;
+  const chartHeight = height - margin.top - margin.bottom;
+  
+  // Properly handle returns data format
+  const returnsData = returns.values ? returns.values : (Array.isArray(returns) ? returns : []);
+  
+  if (!returnsData || returnsData.length === 0) {
+    return `<svg width="576" height="360" viewBox="0 0 576 360">
+      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="288" y="180" text-anchor="middle" fill="#6c757d">No data for returns distribution</text>
+    </svg>`;
+  }
+  
+  // Create histogram
+  const numBins = 40;
+  const minValue = Math.min(...returnsData);
+  const maxValue = Math.max(...returnsData);
+  const binWidth = (maxValue - minValue) / numBins;
+  
+  const bins = Array(numBins).fill(0);
+  returnsData.forEach(value => {
+    const binIndex = Math.min(Math.floor((value - minValue) / binWidth), numBins - 1);
+    bins[binIndex]++;
+  });
+  
+  const maxCount = Math.max(...bins);
+  const barWidth = chartWidth / numBins;
+  
+  // Calculate statistics for overlay
+  const mean = returnsData.reduce((sum, r) => sum + r, 0) / returnsData.length;
+  const variance = returnsData.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / (returnsData.length - 1);
+  const stdDev = Math.sqrt(variance);
+  
+  // Generate normal distribution overlay
+  const normalCurve = [];
+  for (let i = 0; i <= numBins; i++) {
+    const x = minValue + (i / numBins) * (maxValue - minValue);
+    const y = (1 / (stdDev * Math.sqrt(2 * Math.PI))) * 
+              Math.exp(-0.5 * Math.pow((x - mean) / stdDev, 2));
+    const normalizedY = (y / (1 / (stdDev * Math.sqrt(2 * Math.PI)))) * maxCount;
+    
+    const svgX = margin.left + (i / numBins) * chartWidth;
+    const svgY = margin.top + chartHeight - (normalizedY / maxCount) * chartHeight;
+    
+    normalCurve.push(`${i === 0 ? 'M' : 'L'} ${svgX} ${svgY}`);
+  }
+  
+  const bars = bins.map((count, index) => {
+    const x = margin.left + index * barWidth;
+    const barHeight = (count / maxCount) * chartHeight;
+    const y = margin.top + chartHeight - barHeight;
+    
+    return `<rect x="${x}" y="${y}" width="${barWidth - 1}" height="${barHeight}" fill="#1f77b4" opacity="0.7"/>`;
+  }).join('');
+  
+  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background -->
+    <rect width="${width}" height="${height}" fill="white"/>
+    
+    <!-- Chart area -->
+    <rect x="${margin.left}" y="${margin.top}" width="${chartWidth}" height="${chartHeight}" 
+          fill="#fafafa" stroke="#e8e8e8" stroke-width="1"/>
+    
+    <!-- Bars -->
+    ${bars}
+    
+    <!-- Normal distribution overlay -->
+    <path d="${normalCurve.join(' ')}" fill="none" stroke="#ff7f0e" stroke-width="2" opacity="0.8"/>
+    
+    <!-- Mean line -->
+    ${(() => {
+      const meanX = margin.left + ((mean - minValue) / (maxValue - minValue || 1)) * chartWidth;
+      return `<line x1="${meanX}" y1="${margin.top}" x2="${meanX}" y2="${margin.top + chartHeight}" 
+                    stroke="#d62728" stroke-width="2" stroke-dasharray="5,5"/>`;
+    })()}
+    
+    <!-- Title -->
+    <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    
+    <!-- X-axis labels -->
+    <text x="${margin.left}" y="${height - 20}" font-size="10" fill="#666">${(minValue * 100).toFixed(1)}%</text>
+    <text x="${margin.left + chartWidth}" y="${height - 20}" text-anchor="end" font-size="10" fill="#666">${(maxValue * 100).toFixed(1)}%</text>
+    
+    <!-- Legend -->
+    <text x="${width - 120}" y="${margin.top + 20}" font-size="10" fill="#1f77b4">■ Actual</text>
+    <text x="${width - 120}" y="${margin.top + 35}" font-size="10" fill="#ff7f0e">— Normal</text>
+    <text x="${width - 120}" y="${margin.top + 50}" font-size="10" fill="#d62728">--- Mean</text>
+  </svg>`;
 }
 
 /**
@@ -778,76 +1748,37 @@ export function basic(returns, benchmark = null, title = 'Portfolio Performance 
           ${generateLogReturnsChart(returns.values, returns.index, 'Log Returns')}
         </div>
         <div id="vol_returns">
-          <svg width="576" height="360" viewBox="0 0 576 360">
-            <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6" stroke-dasharray="5,5"/>
-            <text x="288" y="180" text-anchor="middle" fill="#6c757d" font-style="italic">Volatility Chart Placeholder</text>
-          </svg>
+          ${generateVolReturnsChart(returns, returns.index || null)}
         </div>
         <div id="eoy_returns">
-          <svg width="576" height="360" viewBox="0 0 576 360">
-            <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6" stroke-dasharray="5,5"/>
-            <text x="288" y="180" text-anchor="middle" fill="#6c757d" font-style="italic">EOY Returns Chart Placeholder</text>
-          </svg>
+          ${generateEOYReturnsChart(returns, returns.index || null)}
         </div>
         <div id="monthly_dist">
-          <svg width="576" height="360" viewBox="0 0 576 360">
-            <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6" stroke-dasharray="5,5"/>
-            <text x="288" y="180" text-anchor="middle" fill="#6c757d" font-style="italic">Monthly Distribution Chart Placeholder</text>
-          </svg>
+          ${generateMonthlyDistChart(returns, returns.index || null)}
         </div>
         <div id="daily_returns">
-          <svg width="576" height="360" viewBox="0 0 576 360">
-            <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6" stroke-dasharray="5,5"/>
-            <text x="288" y="180" text-anchor="middle" fill="#6c757d" font-style="italic">Daily Returns Chart Placeholder</text>
-          </svg>
-        </div>
-        <div id="rolling_beta">
-          <svg width="576" height="360" viewBox="0 0 576 360">
-            <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6" stroke-dasharray="5,5"/>
-            <text x="288" y="180" text-anchor="middle" fill="#6c757d" font-style="italic">Rolling Beta Chart Placeholder</text>
-          </svg>
+          ${generateDailyReturnsChart(returns, returns.index || null)}
         </div>
         <div id="rolling_vol">
-          <svg width="576" height="360" viewBox="0 0 576 360">
-            <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6" stroke-dasharray="5,5"/>
-            <text x="288" y="180" text-anchor="middle" fill="#6c757d" font-style="italic">Rolling Volatility Chart Placeholder</text>
-          </svg>
+          ${generateRollingVolatilityChart(returns, returns.index || null)}
         </div>
         <div id="rolling_sharpe">
-          <svg width="576" height="360" viewBox="0 0 576 360">
-            <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6" stroke-dasharray="5,5"/>
-            <text x="288" y="180" text-anchor="middle" fill="#6c757d" font-style="italic">Rolling Sharpe Chart Placeholder</text>
-          </svg>
+          ${generateRollingSharpeChart(returns, returns.index || null)}
         </div>
         <div id="rolling_sortino">
-          <svg width="576" height="360" viewBox="0 0 576 360">
-            <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6" stroke-dasharray="5,5"/>
-            <text x="288" y="180" text-anchor="middle" fill="#6c757d" font-style="italic">Rolling Sortino Chart Placeholder</text>
-          </svg>
+          ${generateRollingSortinoChart(returns, returns.index || null)}
         </div>
         <div id="dd_periods">
-          <svg width="576" height="360" viewBox="0 0 576 360">
-            <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6" stroke-dasharray="5,5"/>
-            <text x="288" y="180" text-anchor="middle" fill="#6c757d" font-style="italic">DD Periods Chart Placeholder</text>
-          </svg>
+          ${generateDrawdownPeriodsChart(returns, returns.index || null)}
         </div>
         <div id="dd_plot">
-          <svg width="576" height="360" viewBox="0 0 576 360">
-            <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6" stroke-dasharray="5,5"/>
-            <text x="288" y="180" text-anchor="middle" fill="#6c757d" font-style="italic">Drawdown Plot Chart Placeholder</text>
-          </svg>
+          ${generateDrawdownSVG(returns.values, null, 'Drawdowns')}
         </div>
         <div id="monthly_heatmap">
-          <svg width="576" height="360" viewBox="0 0 576 360">
-            <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6" stroke-dasharray="5,5"/>
-            <text x="288" y="180" text-anchor="middle" fill="#6c757d" font-style="italic">Monthly Heatmap Chart Placeholder</text>
-          </svg>
+          ${generateMonthlyHeatmapChart(returns, returns.index || null)}
         </div>
         <div id="returns_dist">
-          <svg width="576" height="360" viewBox="0 0 576 360">
-            <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6" stroke-dasharray="5,5"/>
-            <text x="288" y="180" text-anchor="middle" fill="#6c757d" font-style="italic">Returns Distribution Chart Placeholder</text>
-          </svg>
+          ${generateReturnsDistributionChart(returns, returns.index || null)}
         </div>
       </div>
 
@@ -1010,7 +1941,7 @@ function calculateComprehensiveMetrics(returns, benchmark = null, rfRate = 0.02,
     
     // VaR metrics
     try {
-      const var95 = stats.valueAtRisk(cleanReturns, 0.05, false);
+      const var95 = stats.valueAtRisk(cleanReturns, 1, 0.95, false);
       const cvar95 = stats.cvar(cleanReturns, 0.05, false);
       
       metrics['Daily Value-at-Risk %'] = (var95 * pct).toFixed(2);

@@ -5,7 +5,6 @@ import * as utils from './src/utils.js';
 // Load data
 const rawData = JSON.parse(fs.readFileSync('raw_data_comparison_js.json', 'utf8'));
 const returns = rawData.returns;
-const dates = rawData.dates.map(dateStr => new Date(dateStr));
 
 // Load Python results and fix NaN values
 let pythonContent = fs.readFileSync('python_quantstats_results.json', 'utf8');
@@ -15,8 +14,7 @@ const pythonMetrics = pythonResults[0].metrics;
 
 console.log('=== COMPLETE 65 METRIC PARITY TEST ===\n');
 console.log(`Strategy: ${rawData.strategy_name}`);
-console.log(`Data points: ${returns.length}`);
-console.log(`Date range: ${dates[0].toISOString().split('T')[0]} to ${dates[dates.length-1].toISOString().split('T')[0]}\n`);
+console.log(`Data points: ${returns.length}\n`);
 
 // Helper functions
 function parsePercent(str) {
@@ -177,7 +175,8 @@ if (pythonMetrics['Max Drawdown']) {
 }
 
 if (pythonMetrics['Avg. Drawdown']) {
-  const jsValue = stats.averageDrawdown(returns, dates);
+  const drawdowns = stats.drawdown(returns);
+  const jsValue = drawdowns.reduce((sum, dd) => sum + dd, 0) / drawdowns.length;
   const pythonValue = parsePercent(pythonMetrics['Avg. Drawdown']);
   const result = compareValue(jsValue, pythonValue, 'Avg. Drawdown');
   results.push({metric: 'Avg. Drawdown', ...result});
@@ -186,7 +185,7 @@ if (pythonMetrics['Avg. Drawdown']) {
 
 // Drawdown duration metrics - now implemented!
 if (pythonMetrics['Longest DD Days']) {
-  const jsValue = stats.longestDrawdownDays(returns, dates);
+  const jsValue = stats.longestDrawdownDays(returns);
   const pythonValue = parseNumber(pythonMetrics['Longest DD Days']);
   const result = compareValue(jsValue, pythonValue, 'Longest DD Days');
   results.push({metric: 'Longest DD Days', ...result});
@@ -194,8 +193,7 @@ if (pythonMetrics['Longest DD Days']) {
 }
 
 if (pythonMetrics['Avg. Drawdown Days']) {
-  let jsValue = stats.averageDrawdownDays(returns, dates);
-  jsValue = Math.round(jsValue); // Round like Python: np.round(ret_dd["days"].mean())
+  const jsValue = stats.averageDrawdownDays(returns);
   const pythonValue = parseNumber(pythonMetrics['Avg. Drawdown Days']);
   const result = compareValue(jsValue, pythonValue, 'Avg. Drawdown Days');
   results.push({metric: 'Avg. Drawdown Days', ...result});
@@ -211,8 +209,7 @@ if (pythonMetrics['Recovery Factor']) {
 }
 
 if (pythonMetrics['Ulcer Index']) {
-  let jsValue = stats.ulcerIndex(returns);
-  jsValue = Math.round(jsValue * 100) / 100; // Round to 2 decimals like Python
+  const jsValue = stats.ulcerIndex(returns);
   const pythonValue = parseFloat(pythonMetrics['Ulcer Index']);
   const result = compareValue(jsValue, pythonValue, 'Ulcer Index');
   results.push({metric: 'Ulcer Index', ...result});
@@ -244,19 +241,18 @@ if (pythonMetrics['Kurtosis']) {
   if (!result.skipped) { totalTests++; if (result.match) matchCount++; }
 }
 
-// 8. Expected Returns - now date-aware!
+// 8. Expected Returns
 if (pythonMetrics['Expected Daily']) {
-  let jsValue = stats.expectedReturn(returns, null, true, false, dates);  // compounded=true to match Python
-  jsValue = Math.round(jsValue * 10000) / 10000; // Round to 4 decimals like Python
+  const jsValue = stats.expectedReturn(returns, null, true);  // compounded=true to match Python
   const pythonValue = parsePercent(pythonMetrics['Expected Daily']);
   const result = compareValue(jsValue, pythonValue, 'Expected Daily');
   results.push({metric: 'Expected Daily', ...result});
   if (!result.skipped) { totalTests++; if (result.match) matchCount++; }
 }
 
-// Expected Monthly/Yearly implemented with date-awareness
+// Expected Monthly/Yearly implemented
 if (pythonMetrics['Expected Monthly']) {
-  const jsValue = stats.expectedMonthlyReturn(returns, true, dates);  // compounded=true to match Python
+  const jsValue = stats.expectedMonthlyReturn(returns, true);  // compounded=true to match Python
   const pythonValue = parsePercent(pythonMetrics['Expected Monthly']);
   const result = compareValue(jsValue, pythonValue, 'Expected Monthly');
   results.push({metric: 'Expected Monthly', ...result});
@@ -264,7 +260,7 @@ if (pythonMetrics['Expected Monthly']) {
 }
 
 if (pythonMetrics['Expected Yearly']) {
-  const jsValue = stats.expectedYearlyReturn(returns, true, dates);  // compounded=true to match Python
+  const jsValue = stats.expectedYearlyReturn(returns, true);  // compounded=true to match Python
   const pythonValue = parsePercent(pythonMetrics['Expected Yearly']);
   const result = compareValue(jsValue, pythonValue, 'Expected Yearly');
   results.push({metric: 'Expected Yearly', ...result});
@@ -329,9 +325,9 @@ if (pythonMetrics['Gain/Pain Ratio']) {
   if (!result.skipped) { totalTests++; if (result.match) matchCount++; }
 }
 
-// Gain/Pain (1M) - now implemented with proper date-based monthly resampling!
+// Gain/Pain (1M) - now implemented!
 if (pythonMetrics['Gain/Pain (1M)']) {
-  const jsValue = stats.gainToPainRatioMonthly(returns, 0, dates);
+  const jsValue = stats.gainToPainRatioMonthly(returns);
   const pythonValue = parseFloat(pythonMetrics['Gain/Pain (1M)']);
   const result = compareValue(jsValue, pythonValue, 'Gain/Pain (1M)');
   results.push({metric: 'Gain/Pain (1M)', ...result});
@@ -378,9 +374,9 @@ if (pythonMetrics['Outlier Loss Ratio']) {
   if (!result.skipped) { totalTests++; if (result.match) matchCount++; }
 }
 
-// 11. Period-based Returns - Now date-aware!
+// 11. Period-based Returns - Now implemented!
 if (pythonMetrics['MTD']) {
-  const jsValue = stats.mtdReturn(returns, dates);
+  const jsValue = stats.mtdReturn(returns);
   const pythonValue = parsePercent(pythonMetrics['MTD']);
   const result = compareValue(jsValue, pythonValue, 'MTD');
   results.push({metric: 'MTD', ...result});
@@ -388,7 +384,7 @@ if (pythonMetrics['MTD']) {
 }
 
 if (pythonMetrics['3M']) {
-  const jsValue = stats.threeMonthReturn(returns, dates);
+  const jsValue = stats.threeMonthReturn(returns);
   const pythonValue = parsePercent(pythonMetrics['3M']);
   const result = compareValue(jsValue, pythonValue, '3M');
   results.push({metric: '3M', ...result});
@@ -396,7 +392,7 @@ if (pythonMetrics['3M']) {
 }
 
 if (pythonMetrics['6M']) {
-  const jsValue = stats.sixMonthReturn(returns, dates);
+  const jsValue = stats.sixMonthReturn(returns);
   const pythonValue = parsePercent(pythonMetrics['6M']);
   const result = compareValue(jsValue, pythonValue, '6M');
   results.push({metric: '6M', ...result});
@@ -404,7 +400,7 @@ if (pythonMetrics['6M']) {
 }
 
 if (pythonMetrics['YTD']) {
-  const jsValue = stats.ytdReturn(returns, dates);
+  const jsValue = stats.ytdReturn(returns);
   const pythonValue = parsePercent(pythonMetrics['YTD']);
   const result = compareValue(jsValue, pythonValue, 'YTD');
   results.push({metric: 'YTD', ...result});
@@ -412,7 +408,7 @@ if (pythonMetrics['YTD']) {
 }
 
 if (pythonMetrics['1Y']) {
-  const jsValue = stats.oneYearReturn(returns, dates);
+  const jsValue = stats.oneYearReturn(returns);
   const pythonValue = parsePercent(pythonMetrics['1Y']);
   const result = compareValue(jsValue, pythonValue, '1Y');
   results.push({metric: '1Y', ...result});
@@ -451,7 +447,7 @@ if (pythonMetrics['All-time (ann.)']) {
   if (!result.skipped) { totalTests++; if (result.match) matchCount++; }
 }
 
-// 12. Best/Worst Performance - now date-aware!
+// 12. Best/Worst Performance
 if (pythonMetrics['Best Day']) {
   const jsValue = stats.best(returns);
   const pythonValue = parsePercent(pythonMetrics['Best Day']);
@@ -469,7 +465,7 @@ if (pythonMetrics['Worst Day']) {
 }
 
 if (pythonMetrics['Best Month']) {
-  const monthlyRets = stats.monthlyReturns(returns, false, dates, true); // Use compounded method (now fixed!)
+  const monthlyRets = stats.monthlyReturns(returns);
   const jsValue = stats.best(monthlyRets);
   const pythonValue = parsePercent(pythonMetrics['Best Month']);
   const result = compareValue(jsValue, pythonValue, 'Best Month');
@@ -478,7 +474,7 @@ if (pythonMetrics['Best Month']) {
 }
 
 if (pythonMetrics['Worst Month']) {
-  const monthlyRets = stats.monthlyReturns(returns, false, dates, true);
+  const monthlyRets = stats.monthlyReturns(returns);
   const jsValue = stats.worst(monthlyRets);
   const pythonValue = parsePercent(pythonMetrics['Worst Month']);
   const result = compareValue(jsValue, pythonValue, 'Worst Month');
@@ -487,7 +483,7 @@ if (pythonMetrics['Worst Month']) {
 }
 
 if (pythonMetrics['Best Year']) {
-  const yearlyRets = stats.yearlyReturns(returns, false, dates, true);
+  const yearlyRets = stats.yearlyReturns(returns);
   const jsValue = stats.best(yearlyRets);
   const pythonValue = parsePercent(pythonMetrics['Best Year']);
   const result = compareValue(jsValue, pythonValue, 'Best Year');
@@ -496,7 +492,7 @@ if (pythonMetrics['Best Year']) {
 }
 
 if (pythonMetrics['Worst Year']) {
-  const yearlyRets = stats.yearlyReturns(returns, false, dates, true);
+  const yearlyRets = stats.yearlyReturns(returns);
   const jsValue = stats.worst(yearlyRets);
   const pythonValue = parsePercent(pythonMetrics['Worst Year']);
   const result = compareValue(jsValue, pythonValue, 'Worst Year');
@@ -504,9 +500,9 @@ if (pythonMetrics['Worst Year']) {
   if (!result.skipped) { totalTests++; if (result.match) matchCount++; }
 }
 
-// Monthly performance - now date-aware!
+// Monthly performance - now implemented!
 if (pythonMetrics['Avg. Up Month']) {
-  const jsValue = stats.avgUpMonth(returns, true, dates);
+  const jsValue = stats.avgUpMonth(returns);
   const pythonValue = parsePercent(pythonMetrics['Avg. Up Month']);
   const result = compareValue(jsValue, pythonValue, 'Avg. Up Month');
   results.push({metric: 'Avg. Up Month', ...result});
@@ -514,14 +510,14 @@ if (pythonMetrics['Avg. Up Month']) {
 }
 
 if (pythonMetrics['Avg. Down Month']) {
-  const jsValue = stats.avgDownMonth(returns, true, dates);
+  const jsValue = stats.avgDownMonth(returns);
   const pythonValue = parsePercent(pythonMetrics['Avg. Down Month']);
   const result = compareValue(jsValue, pythonValue, 'Avg. Down Month');
   results.push({metric: 'Avg. Down Month', ...result});
   if (!result.skipped) { totalTests++; if (result.match) matchCount++; }
 }
 
-// 13. Win Rate Metrics - now date-aware for monthly aggregation!
+// 13. Win Rate Metrics
 if (pythonMetrics['Win Days']) {
   const jsValue = stats.winRate(returns);
   const pythonValue = parsePercent(pythonMetrics['Win Days']);
@@ -531,7 +527,7 @@ if (pythonMetrics['Win Days']) {
 }
 
 if (pythonMetrics['Win Month']) {
-  const monthlyRets = stats.monthlyReturns(returns, false, dates, true);
+  const monthlyRets = stats.monthlyReturns(returns);
   const jsValue = stats.winRate(monthlyRets);
   const pythonValue = parsePercent(pythonMetrics['Win Month']);
   const result = compareValue(jsValue, pythonValue, 'Win Month');
@@ -541,7 +537,7 @@ if (pythonMetrics['Win Month']) {
 
 // Win Quarter - now implemented!
 if (pythonMetrics['Win Quarter']) {
-  const jsValue = stats.winQuarter(returns, dates);
+  const jsValue = stats.winQuarter(returns);
   const pythonValue = parsePercent(pythonMetrics['Win Quarter']);
   const result = compareValue(jsValue, pythonValue, 'Win Quarter');
   results.push({metric: 'Win Quarter', ...result});
@@ -549,7 +545,7 @@ if (pythonMetrics['Win Quarter']) {
 }
 
 if (pythonMetrics['Win Year']) {
-  const yearlyRets = stats.yearlyReturns(returns, false, dates, true);
+  const yearlyRets = stats.yearlyReturns(returns);
   const jsValue = stats.winRate(yearlyRets);
   const pythonValue = parsePercent(pythonMetrics['Win Year']);
   const result = compareValue(jsValue, pythonValue, 'Win Year');
