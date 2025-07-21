@@ -74,7 +74,6 @@ export function metrics(returns, benchmark = null, rfRate = 0, nans = false) {
       metrics.beta = stats.beta(cleanReturns, cleanBenchmark, nans);
       metrics.alpha = stats.alpha(cleanReturns, cleanBenchmark, rfRate, nans);
       metrics.informationRatio = stats.informationRatio(cleanReturns, cleanBenchmark, nans);
-      metrics.trackingError = stats.trackingError(cleanReturns, cleanBenchmark, nans);
     }
   }
   
