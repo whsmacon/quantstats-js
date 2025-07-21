@@ -45,7 +45,7 @@ const everything = qs.reports.calculateComprehensiveMetrics(returnsData, 0.02, '
 console.log('Period Returns:', everything['MTD %'], everything['YTD %']);
 
 // Get core metrics quickly
-const allMetrics = qs.reports.metrics(returns);
+const allMetrics = qs.reports.metrics(returns.values);
 console.log('Sharpe:', allMetrics.sharpe, 'Max DD:', allMetrics.maxDrawdown);
 
 // Or calculate individual metrics
@@ -73,7 +73,7 @@ const returns = {
 };
 
 // Generate complete tearsheet
-const tearsheet = qs.reports.basic(returns, null, 'My Portfolio Strategy');
+const tearsheet = qs.reports.basic(returns, 'My Portfolio Strategy');
 
 // Save professional HTML report
 fs.writeFileSync('tearsheet.html', tearsheet);
@@ -117,13 +117,13 @@ Complete tearsheet generation with professional visualizations:
 
 ```javascript
 // Basic tearsheet (recommended)
-const tearsheet = qs.reports.basic(returnsData, title?);
+const tearsheet = qs.reports.basic(returns, title, rfRate, nans);
 
 // Just the metrics (no charts)
-const metrics = qs.reports.metrics(returns);
+const metrics = qs.reports.metrics(returns, rfRate, nans);
 
 // Generate comprehensive metrics object
-const allMetrics = qs.reports.calculateComprehensiveMetrics(returnsData);
+const allMetrics = qs.reports.calculateComprehensiveMetrics(returns, rfRate, mode);
 ```
 
 **Chart Functions Available:**
@@ -239,7 +239,7 @@ For just the core metrics without formatting, use `reports.metrics()`:
 
 ```javascript
 // Get core metrics in simple object format (40+ metrics)
-const coreMetrics = qs.reports.metrics(returns, 0.02, false);
+const coreMetrics = qs.reports.metrics(returns.values, 0.02, false);
 ```
 
 #### 📉 Get Detailed Drawdown Analysis
@@ -365,7 +365,7 @@ const returnsData = {
   index: dates
 };
 
-// Generate professional tearsheet
+// Generate professional tearsheet  
 const tearsheet = qs.reports.basic(
   returnsData,
   'My Portfolio Strategy Analysis'
@@ -472,7 +472,7 @@ const prices = [100, 102, 101, 105, 103, 108, 106, 112];
 const returns = qs.utils.toReturns(prices);
 
 // Calculate comprehensive metrics (simple array format)
-const metrics = qs.reports.metrics(returns);
+const metrics = qs.reports.metrics(returns.values);
 
 console.log('Portfolio Analysis:', {
   totalReturn: `${(metrics.totalReturn * 100).toFixed(2)}%`,
@@ -545,7 +545,7 @@ const returnsData = {
 };
 
 // Generate professional tearsheet
-const tearsheet = qs.reports.basic(returnsData, null, 'My Strategy');
+const tearsheet = qs.reports.basic(returnsData, 'My Strategy');
 ```
 
 ### For Basic Calculations
@@ -555,7 +555,7 @@ const tearsheet = qs.reports.basic(returnsData, null, 'My Strategy');
 const returns = [0.01, -0.005, 0.02, -0.01, 0.015];
 
 // Calculate basic metrics
-const metrics = qs.reports.metrics(returns);
+const metrics = qs.reports.metrics(returns.values);
 const sharpe = qs.stats.sharpe(returns);
 ```
 
@@ -714,9 +714,9 @@ Apache License 2.0 - see [LICENSE](LICENSE) file for details.
 - **Cleaner Codebase** - Removed unused benchmark calculation functions and complexity
 
 **📦 What Changed:**
-- `qs.reports.basic(returns, title?)` - No longer accepts benchmark parameter
-- `qs.reports.metrics(returns, rfRate?, nans?)` - No longer accepts benchmark parameter
-- `qs.reports.calculateComprehensiveMetrics(returns, rfRate?)` - No longer accepts benchmark parameter
+- `qs.reports.basic(returns, title, rfRate, nans)` - No longer accepts benchmark parameter
+- `qs.reports.metrics(returns, rfRate, nans)` - No longer accepts benchmark parameter
+- `qs.reports.calculateComprehensiveMetrics(returns, rfRate, mode)` - No longer accepts benchmark parameter
 - Removed Rolling Beta chart and related benchmark comparison features
 - Removed unused helper functions (`calculateCovariance`, `calculateVariance`, `calculateCorrelation`)
 

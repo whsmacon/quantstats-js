@@ -2018,16 +2018,16 @@ export function calculateComprehensiveMetrics(returns, rfRate = 0.02, mode = 'ba
     // Trading metrics
     const profitFactor = stats.profitFactor(cleanReturns, false);
     const payoffRatio = stats.payoffRatio(cleanReturns, false);
-    const gainToLoss = Math.abs(stats.avgWin(cleanReturns, false) / stats.avgLoss(cleanReturns, false));
+    const gainToPainRatio = stats.gainToPainRatio(cleanReturns, rfRate, false);
     
-    metrics['Gain/Loss Ratio'] = gainToLoss.toFixed(2);
+    metrics['Gain/Pain Ratio'] = gainToPainRatio.toFixed(2);
     metrics['Payoff Ratio'] = payoffRatio.toFixed(2);
     metrics['Profit Factor'] = profitFactor.toFixed(2);
     
-    // Advanced ratios
-    const commonSenseRatio = profitFactor; // Simplified
-    const cpcIndex = profitFactor * stats.winRate(cleanReturns, false);
-    const tailRatio = Math.abs(stats.avgWin(cleanReturns, false) / stats.avgLoss(cleanReturns, false));
+    // Advanced ratios (using proper Python QuantStats formulas)
+    const commonSenseRatio = stats.commonSenseRatio(cleanReturns, false);
+    const cpcIndex = stats.cpcIndex(cleanReturns, false);
+    const tailRatio = stats.tailRatio(cleanReturns, 0.95, false);
     
     metrics['Common Sense Ratio'] = commonSenseRatio.toFixed(2);
     metrics['CPC Index'] = cpcIndex.toFixed(2);
@@ -2035,8 +2035,11 @@ export function calculateComprehensiveMetrics(returns, rfRate = 0.02, mode = 'ba
     
     // Outlier metrics (full mode only)
     if (mode.toLowerCase() === 'full') {
-      metrics['Outlier Win Ratio'] = payoffRatio.toFixed(2);
-      metrics['Outlier Loss Ratio'] = payoffRatio.toFixed(2);
+      const outlierWinRatio = stats.outlierWinRatio(cleanReturns, 0.99, false);
+      const outlierLossRatio = stats.outlierLossRatio(cleanReturns, 0.01, false);
+      
+      metrics['Outlier Win Ratio'] = outlierWinRatio.toFixed(2);
+      metrics['Outlier Loss Ratio'] = outlierLossRatio.toFixed(2);
       
       // Consecutive wins/losses
       const { maxConsecutiveWins, maxConsecutiveLosses } = calculateConsecutiveWinsLosses(cleanReturns);
