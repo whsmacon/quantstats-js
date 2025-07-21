@@ -331,9 +331,9 @@ function generateCumulativeReturnsChart(returns, dates, title = 'Cumulative Retu
  * Generate EOY Returns bar chart
  */
 function generateEOYReturnsChart(returns, dates, title = 'EOY Returns') {
-  const width = 640; // Slightly wider for better year label spacing
-  const height = 420; // Taller for angled labels
-  const margin = { top: 50, right: 40, bottom: 100, left: 70 }; // Much larger bottom margin for angled labels
+  const width = 720; // Wide enough for long time series
+  const height = 380; // Reduced height since no angled labels
+  const margin = { top: 50, right: 40, bottom: 50, left: 70 }; // Smaller bottom margin
   const chartWidth = width - margin.left - margin.right;
   const chartHeight = height - margin.top - margin.bottom;
   
@@ -361,19 +361,19 @@ function generateEOYReturnsChart(returns, dates, title = 'EOY Returns') {
   }
   
   if (!yearlyReturns || yearlyReturns.length === 0) {
-    return `<svg width="640" height="420" viewBox="0 0 640 420">
-      <rect width="640" height="420" fill="#f8f9fa" stroke="#dee2e6"/>
-      <text x="320" y="210" text-anchor="middle" fill="#6c757d">No EOY data available</text>
+    return `<svg width="720" height="380" viewBox="0 0 720 380">
+      <rect width="720" height="380" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="360" y="190" text-anchor="middle" fill="#6c757d">No EOY data available</text>
     </svg>`;
   }
   
   const minValue = Math.min(...yearlyReturns, -0.05);
   const maxValue = Math.max(...yearlyReturns, 0.05);
   const valueRange = maxValue - minValue || 1;
+  const numYears = yearlyReturns.length;
   
-  // Calculate bar dimensions with better spacing
-  const barSpacing = Math.max(6, chartWidth / yearlyReturns.length * 0.2);
-  const barWidth = Math.max(20, (chartWidth - (yearlyReturns.length - 1) * barSpacing) / yearlyReturns.length);
+  // Dynamic bar sizing - no gaps for long series, wider for short series
+  const barWidth = chartWidth / numYears;
   
   // Function to convert value to y-coordinate
   const valueToY = (value) => {
@@ -382,40 +382,58 @@ function generateEOYReturnsChart(returns, dates, title = 'EOY Returns') {
   
   const zeroY = valueToY(0);
   
-  // Generate bars with enhanced styling and angled year labels
+  // Smart year labeling based on number of years
+  const getLabelInfo = (year, index) => {
+    if (numYears <= 10) {
+      // Show all years for short series
+      return { show: true, text: year.toString(), size: 11 };
+    } else if (numYears <= 20) {
+      // Show every other year
+      return { show: index % 2 === 0, text: year.toString(), size: 10 };
+    } else if (numYears <= 30) {
+      // Show every 5th year or decade boundaries
+      const show = (year % 5 === 0) || (index === 0) || (index === numYears - 1);
+      return { show: show, text: `'${year.toString().slice(-2)}`, size: 9 };
+    } else {
+      // Show only decade boundaries for very long series
+      const show = (year % 10 === 0) || (index === 0) || (index === numYears - 1);
+      const text = (year % 10 === 0) ? year.toString() : `'${year.toString().slice(-2)}`;
+      return { show: show, text: text, size: 9 };
+    }
+  };
+  
+  // Generate bars and labels (no percentage labels on bars)
   const bars = yearlyReturns.map((value, index) => {
-    const x = margin.left + index * (barWidth + barSpacing);
+    const x = margin.left + index * barWidth;
     const barY = valueToY(value);
     const barHeight = Math.abs(barY - zeroY);
     const isPositive = value >= 0;
     const finalY = isPositive ? barY : zeroY;
     
-    const color = isPositive ? '#2E8B57' : '#DC143C'; // Darker, more professional colors
+    const color = isPositive ? '#2E8B57' : '#DC143C';
     const hoverColor = isPositive ? '#228B22' : '#B22222';
-    
-    // Calculate position for angled label
-    const labelX = x + barWidth/2;
-    const labelY = height - margin.bottom + 50; // Position in the extended bottom margin
     
     // Get the year for this bar
     const year = years[index] || (new Date().getFullYear() - yearlyReturns.length + index + 1);
+    const labelInfo = getLabelInfo(year, index);
+    
+    // Generate year label if needed
+    let yearLabel = '';
+    if (labelInfo.show) {
+      const labelX = x + barWidth/2;
+      const labelY = height - margin.bottom + 20;
+      yearLabel = `<text x="${labelX}" y="${labelY}" text-anchor="middle" font-size="${labelInfo.size}" 
+                         font-weight="500" fill="#555">${labelInfo.text}</text>`;
+    }
     
     return `<rect x="${x}" y="${finalY}" width="${barWidth}" height="${barHeight}" 
                   fill="${color}" opacity="0.85" stroke="${hoverColor}" stroke-width="0.5"/>
-            
-            <!-- Value label above/below bar -->
-            <text x="${x + barWidth/2}" y="${finalY - (isPositive ? 8 : -(barHeight + 18))}" 
-                  text-anchor="middle" font-size="11" font-weight="500" fill="#333">
-                  ${(value * 100).toFixed(1)}%</text>
-            
-            <!-- Angled year label -->
-            <text x="${labelX}" y="${labelY}" text-anchor="start" font-size="12" font-weight="500" fill="#555"
-                  transform="rotate(-45 ${labelX} ${labelY})">${year}</text>`;
+            ${yearLabel}`;
   }).join('');
   
   // Enhanced grid lines
   const gridLines = [];
-  const numGridLines = 6;
+  const numGridLines = 8;
   for (let i = 0; i <= numGridLines; i++) {
     const gridValue = minValue + (valueRange * i / numGridLines);
     const y = valueToY(gridValue);
@@ -454,6 +472,10 @@ function generateEOYReturnsChart(returns, dates, title = 'EOY Returns') {
     <!-- Y-axis label -->
     <text x="25" y="${height/2}" text-anchor="middle" font-size="12" fill="#666" font-weight="500"
           transform="rotate(-90 25 ${height/2})">Annual Returns (%)</text>
+    
+    <!-- Data range indicator for long series -->
+    ${numYears > 15 ? `<text x="${width - 20}" y="${height - 10}" text-anchor="end" font-size="9" fill="#999">
+                          ${years[0]} - ${years[years.length-1]} (${numYears} years)</text>` : ''}
   </svg>`;
 }
 
