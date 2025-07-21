@@ -37,10 +37,18 @@ const dates = returns.map((_, i) => new Date(2023, 0, i + 1));
 const returnsData = { values: returns, index: dates };
 
 // Generate complete tearsheet (like Python QuantStats!)
-const tearsheet = qs.reports.basic(returnsData, null, 'My Portfolio');
+const tearsheet = qs.reports.basic(returnsData, 'My Portfolio');
 console.log('Professional tearsheet generated:', tearsheet.length, 'bytes');
 
-// Calculate key metrics
+// Get EVERYTHING - 50+ comprehensive metrics in one call!
+const everything = qs.reports.calculateComprehensiveMetrics(returnsData, 0.02, 'full');
+console.log('Period Returns:', everything['MTD %'], everything['YTD %']);
+
+// Get core metrics quickly
+const allMetrics = qs.reports.metrics(returns);
+console.log('Sharpe:', allMetrics.sharpe, 'Max DD:', allMetrics.maxDrawdown);
+
+// Or calculate individual metrics
 const totalReturn = qs.stats.totalReturn(returns);
 const sharpe = qs.stats.sharpe(returns);
 const maxDrawdown = qs.stats.maxDrawdown(returns);
@@ -130,6 +138,166 @@ const allMetrics = qs.reports.calculateComprehensiveMetrics(returnsData);
 - `generateMonthlyHeatmapChart()` - Monthly returns heatmap
 - `generateVolatilityReturnsChart()` - Risk vs return scatter
 - `generateEOYTable()` - End-of-year returns table
+
+#### 🚀 Get ALL Stats in One Call - The Ultimate Function
+
+Want **EVERYTHING**? Use `reports.calculateComprehensiveMetrics()` - this is the powerhouse function that returns 50+ metrics:
+
+```javascript
+import * as qs from 'quantstats-js';
+
+// Your returns data with dates (required for comprehensive analysis)
+const returnsData = {
+  values: [0.01, -0.005, 0.02, -0.01, 0.015, -0.008, 0.025],
+  index: [/* array of Date objects */]
+};
+
+// Get EVERYTHING - 50+ metrics in one call!
+const everything = qs.reports.calculateComprehensiveMetrics(returnsData, 0.02, 'full');
+
+console.log(everything);
+// Returns comprehensive object with ALL metrics:
+// {
+//   'Start Period': '2023-01-01',
+//   'End Period': '2023-12-31',
+//   'Risk-Free Rate %': '2.00%',
+//   'Time in Market %': '100.00%',
+//   'Cumulative Return %': '5.47%',
+//   'CAGR﹪': '2.34%',
+//   'Sharpe': '1.23',
+//   'Prob. Sharpe Ratio %': '87.23%',
+//   'Smart Sharpe': '1.23',
+//   'Sortino': '1.45',
+//   'Smart Sortino': '1.45',
+//   'Volatility (ann.) %': '14.56%',
+//   'Max Drawdown %': '-2.34%',
+//   'Longest DD Days': 5,
+//   'Calmar': '0.87',
+//   'Skew': '0.23',
+//   'Kurtosis': '2.45',
+//   'Expected Daily %': '0.12%',
+//   'Expected Monthly %': '2.45%', 
+//   'Expected Yearly %': '28.7%',
+//   'Kelly Criterion %': '23.4%',
+//   'Risk of Ruin %': '0.12%',
+//   'Daily Value-at-Risk %': '-1.23%',
+//   'Expected Shortfall (cVaR) %': '-1.56%',
+//   'Gain/Loss Ratio': '1.45',
+//   'Payoff Ratio': '1.23',
+//   'Profit Factor': '1.67',
+//   'Common Sense Ratio': '1.45',
+//   'CPC Index': '1.08',
+//   'Tail Ratio': '1.45',
+//   'Outlier Win Ratio': '1.23',
+//   'Outlier Loss Ratio': '1.23',
+//   'Max Consecutive Wins': 3,
+//   'Max Consecutive Losses': 2,
+//   'MTD %': '1.23%',
+//   '3M %': '4.56%',
+//   '6M %': '7.89%',
+//   'YTD %': '12.34%',
+//   '1Y (ann.) %': '12.34%',
+//   '3Y (ann.) %': '8.67%',
+//   '5Y (ann.) %': '9.12%',
+//   '10Y (ann.) %': '7.89%',
+//   'All-time (ann.) %': '2.34%',
+//   'Best Day %': '2.50%',
+//   'Worst Day %': '-1.50%',
+//   'Best Month %': '5.67%',
+//   'Worst Month %': '-3.45%',
+//   'Best Year %': '15.67%',
+//   'Worst Year %': '-8.90%',
+//   'Avg. Drawdown %': '-1.23%',
+//   'Avg. Drawdown Days': 2,
+//   'Recovery Factor': '2.34',
+//   'Ulcer Index': '0.01',
+//   'Serenity Index': '1.23',
+//   'Avg. Up Month': '3.45%',
+//   'Avg. Down Month': '-2.34%',
+//   'Win Days %': '64.3%',
+//   'Win Month %': '58.3%',
+//   'Win Quarter %': '66.7%',
+//   'Win Year %': '80.0%'
+//   // ... and more!
+// }
+```
+
+**Parameters:**
+- `returnsData` - Object with `{values: [...], index: [dates...]}`
+- `rfRate` - Risk-free rate (default: 0.02 = 2%)
+- `mode` - 'basic' or 'full' (full mode includes 20+ additional metrics)
+
+**Benefits:**
+- 🎯 **Most Comprehensive**: 50+ metrics including period returns, drawdown analysis, win rates
+- 📊 **Professional Format**: Matches Python QuantStats exactly with % formatting
+- 🔧 **Configurable Depth**: Basic vs Full mode for different analysis needs  
+- ⚡ **Single Call**: Everything you need for complete portfolio analysis
+
+#### 📈 Quick Metrics Only
+
+For just the core metrics without formatting, use `reports.metrics()`:
+
+```javascript
+// Get core metrics in simple object format (40+ metrics)
+const coreMetrics = qs.reports.metrics(returns, 0.02, false);
+```
+
+#### 📉 Get Detailed Drawdown Analysis
+
+Want comprehensive drawdown details for every single drawdown period? Use the utils module:
+
+```javascript
+import * as qs from 'quantstats-js';
+
+// Your returns data with dates
+const returnsData = {
+  values: [0.01, -0.005, 0.02, -0.01, 0.015, -0.008, 0.025, -0.012, 0.018],
+  index: [/* array of Date objects */]
+};
+
+// Get detailed analysis of EVERY drawdown period
+const allDrawdowns = qs.utils.drawdownDetails(returnsData.values, returnsData.index);
+
+console.log(allDrawdowns);
+// Returns array with details of each drawdown period:
+// [
+//   {
+//     'start': Date('2023-01-02'),      // When drawdown started
+//     'valley': Date('2023-01-04'),     // Lowest point 
+//     'end': Date('2023-01-06'),        // When recovered
+//     'days': 5,                        // Duration in days
+//     'max drawdown': -0.0234,          // Peak drawdown %
+//     '99% max drawdown': -0.0156       // 99% confidence level
+//   },
+//   {
+//     'start': Date('2023-02-10'),
+//     'valley': Date('2023-02-12'),
+//     'end': Date('2023-02-15'), 
+//     'days': 6,
+//     'max drawdown': -0.0189,
+//     '99% max drawdown': -0.0134
+//   }
+//   // ... every single drawdown period with full details
+// ]
+
+// Get the continuous drawdown series (daily drawdown values)
+const ddSeries = qs.utils.toDrawdownSeries(returnsData.values);
+console.log('Current drawdown:', ddSeries[ddSeries.length - 1]);
+console.log('Max drawdown:', Math.min(...ddSeries));
+
+// Quick drawdown stats from comprehensive metrics
+const stats = qs.reports.calculateComprehensiveMetrics(returnsData, 0.02, 'full');
+console.log('Longest DD Days:', stats['Longest DD Days']);
+console.log('Avg DD Days:', stats['Avg. Drawdown Days']);
+console.log('Recovery Factor:', stats['Recovery Factor']);
+```
+
+**Drawdown Analysis Features:**
+- 📊 **Every Period**: Complete details for each individual drawdown
+- 📅 **Full Timeline**: Start date, valley date, recovery date
+- ⏱️ **Duration**: Days underwater for each period  
+- 📈 **Recovery Tracking**: When and how portfolio recovered
+- 🎯 **Statistical Confidence**: 99% confidence intervals
 
 ### 📈 Stats Module
 Financial metrics and risk calculations:

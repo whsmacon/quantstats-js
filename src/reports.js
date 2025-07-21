@@ -1103,103 +1103,6 @@ function generateVolReturnsChart(returns, dates, title = 'Volatility vs Returns'
 }
 
 /**
- * Generate Rolling Beta chart
- */
-function generateRollingBetaChart(returns, benchmark, dates, title = 'Rolling Beta to Benchmark (30 day)') {
-  const width = 576;
-  const height = 360;
-  const margin = { top: 40, right: 40, bottom: 80, left: 60 };
-  const chartWidth = width - margin.left - margin.right;
-  const chartHeight = height - margin.top - margin.bottom;
-  
-  // Properly handle returns data format
-  const returnsData = returns.values ? returns.values : (Array.isArray(returns) ? returns : []);
-  const benchmarkData = benchmark && benchmark.values ? benchmark.values : (Array.isArray(benchmark) ? benchmark : []);
-  
-  if (!returnsData || !benchmarkData || returnsData.length < 30 || benchmarkData.length < 30) {
-    return `<svg width="576" height="360" viewBox="0 0 576 360">
-      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
-      <text x="288" y="180" text-anchor="middle" fill="#6c757d">Insufficient data for rolling beta</text>
-    </svg>`;
-  }
-  
-  // Calculate 30-day rolling beta
-  const window = 30;
-  const rollingBeta = [];
-  
-  for (let i = window - 1; i < Math.min(returnsData.length, benchmarkData.length); i++) {
-    const portfolioWindow = returnsData.slice(i - window + 1, i + 1);
-    const benchmarkWindow = benchmarkData.slice(i - window + 1, i + 1);
-    
-    // Calculate beta using covariance/variance
-    const meanPortfolio = portfolioWindow.reduce((sum, r) => sum + r, 0) / portfolioWindow.length;
-    const meanBenchmark = benchmarkWindow.reduce((sum, r) => sum + r, 0) / benchmarkWindow.length;
-    
-    let covariance = 0;
-    let benchmarkVariance = 0;
-    
-    for (let j = 0; j < window; j++) {
-      const portfolioDeviation = portfolioWindow[j] - meanPortfolio;
-      const benchmarkDeviation = benchmarkWindow[j] - meanBenchmark;
-      
-      covariance += portfolioDeviation * benchmarkDeviation;
-      benchmarkVariance += benchmarkDeviation * benchmarkDeviation;
-    }
-    
-    covariance /= (window - 1);
-    benchmarkVariance /= (window - 1);
-    
-    const beta = benchmarkVariance > 0 ? covariance / benchmarkVariance : 0;
-    rollingBeta.push(beta);
-  }
-  
-  if (rollingBeta.length === 0) {
-    return `<svg width="576" height="360" viewBox="0 0 576 360">
-      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
-      <text x="288" y="180" text-anchor="middle" fill="#6c757d">Unable to calculate rolling beta</text>
-    </svg>`;
-  }
-  
-  const minValue = Math.min(...rollingBeta);
-  const maxValue = Math.max(...rollingBeta);
-  const valueRange = maxValue - minValue || 1;
-  
-  // Generate path data
-  const pathData = rollingBeta.map((value, index) => {
-    const x = margin.left + (index / (rollingBeta.length - 1)) * chartWidth;
-    const y = margin.top + ((maxValue - value) / valueRange) * chartHeight;
-    return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
-  }).join(' ');
-  
-  // Beta = 1 line
-  const oneY = margin.top + ((maxValue - 1) / valueRange) * chartHeight;
-  
-  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
-    <!-- Background -->
-    <rect width="${width}" height="${height}" fill="white"/>
-    
-    <!-- Chart area -->
-    <rect x="${margin.left}" y="${margin.top}" width="${chartWidth}" height="${chartHeight}" 
-          fill="#fafafa" stroke="#e8e8e8" stroke-width="1"/>
-    
-    <!-- Beta = 1 line -->
-    ${oneY >= margin.top && oneY <= margin.top + chartHeight ? 
-      `<line x1="${margin.left}" y1="${oneY}" x2="${margin.left + chartWidth}" y2="${oneY}" 
-             stroke="#666" stroke-width="1" stroke-dasharray="2,3"/>` : ''}
-    
-    <!-- Rolling beta line -->
-    <path d="${pathData}" fill="none" stroke="#17becf" stroke-width="2"/>
-    
-    <!-- Title -->
-    <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
-    
-    <!-- Y-axis labels -->
-    <text x="15" y="${margin.top + 10}" font-size="11" fill="#666">${maxValue.toFixed(2)}</text>
-    <text x="15" y="${margin.top + chartHeight - 5}" font-size="11" fill="#666">${minValue.toFixed(2)}</text>
-  </svg>`;
-}
-
-/**
  * Generate Monthly Heatmap chart
  */
 function generateMonthlyHeatmapChart(returns, dates, title = 'Monthly Returns Heatmap') {
@@ -1977,9 +1880,9 @@ export function basic(returns, title = 'Portfolio Performance Report', rfRate = 
 /**
  * Generate HTML tearsheet report
  */
-export function html(returns, filename = 'quantstats_report.html', benchmark = null, title = null, rfRate = 0, nans = false) {
+export function html(returns, filename = 'quantstats_report.html', title = null, rfRate = 0, nans = false) {
   const reportTitle = title || 'Portfolio Performance Report';
-  const htmlContent = basic(returns, benchmark, reportTitle, rfRate, nans);
+  const htmlContent = basic(returns, reportTitle, rfRate, nans);
   
   console.log(`HTML report generated. Use fs.writeFileSync('${filename}', htmlContent) to save.`);
   
@@ -1992,7 +1895,7 @@ export function html(returns, filename = 'quantstats_report.html', benchmark = n
 export { metrics as performanceMetrics };
 
 // Helper functions for HTML generation
-function calculateComprehensiveMetrics(returns, rfRate = 0.02, mode = 'basic') {
+export function calculateComprehensiveMetrics(returns, rfRate = 0.02, mode = 'basic') {
   if (!returns || !returns.values || returns.values.length === 0 || !returns.index) {
     throw new Error('Invalid returns data provided - missing values or index');
   }
