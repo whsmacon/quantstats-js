@@ -5,12 +5,11 @@ import * as plots from './plots.js';
 /**
  * Generate comprehensive portfolio metrics
  * @param {Array} returns - Returns array
- * @param {Array} benchmark - Benchmark returns (optional)
  * @param {number} rfRate - Risk-free rate (default 0)
  * @param {boolean} nans - Include NaN values (default false)
  * @returns {Object} Comprehensive metrics object
  */
-export function metrics(returns, benchmark = null, rfRate = 0, nans = false) {
+export function metrics(returns, rfRate = 0, nans = false) {
   const cleanReturns = utils.prepareReturns(returns, rfRate, nans);
   
   if (cleanReturns.length === 0) {
@@ -65,17 +64,6 @@ export function metrics(returns, benchmark = null, rfRate = 0, nans = false) {
       };
     })()
   };
-  
-  // Add benchmark-relative metrics if benchmark provided
-  if (benchmark) {
-    const cleanBenchmark = utils.prepareReturns(benchmark, rfRate, nans);
-    
-    if (cleanBenchmark.length > 0) {
-      metrics.beta = stats.beta(cleanReturns, cleanBenchmark, nans);
-      metrics.alpha = stats.alpha(cleanReturns, cleanBenchmark, rfRate, nans);
-      metrics.informationRatio = stats.informationRatio(cleanReturns, cleanBenchmark, nans);
-    }
-  }
   
   return metrics;
 }
@@ -1492,14 +1480,14 @@ function generateReturnsDistributionChart(returns, dates, title = 'Returns Distr
 /**
  * Generate basic HTML report exactly matching Python QuantStats format
  */
-export function basic(returns, benchmark = null, title = 'Portfolio Performance Report', rfRate = 0, nans = false) {
+export function basic(returns, title = 'Portfolio Performance Report', rfRate = 0, nans = false) {
   // Use actual dates from the data - NO FALLBACKS
   const startDate = returns?.index?.[0]?.toISOString().split('T')[0];
   const endDate = returns?.index?.[returns.index.length - 1]?.toISOString().split('T')[0];
   const dateRange = `${startDate} - ${endDate}`;
 
   // Calculate actual comprehensive metrics using real data - NO FALLBACKS
-  const performanceMetrics = calculateComprehensiveMetrics(returns, benchmark, rfRate, 'full');
+  const performanceMetrics = calculateComprehensiveMetrics(returns, rfRate, 'full');
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -2004,7 +1992,7 @@ export function html(returns, filename = 'quantstats_report.html', benchmark = n
 export { metrics as performanceMetrics };
 
 // Helper functions for HTML generation
-function calculateComprehensiveMetrics(returns, benchmark = null, rfRate = 0.02, mode = 'basic') {
+function calculateComprehensiveMetrics(returns, rfRate = 0.02, mode = 'basic') {
   if (!returns || !returns.values || returns.values.length === 0 || !returns.index) {
     throw new Error('Invalid returns data provided - missing values or index');
   }
@@ -2259,37 +2247,6 @@ function calculateComprehensiveMetrics(returns, benchmark = null, rfRate = 0.02,
       
       const yearlyWinRate = calculateYearlyWinRate(returns);
       metrics['Win Year %'] = yearlyWinRate !== null ? (yearlyWinRate * pct).toFixed(2) + '%' : '-';
-    }
-    
-    // Benchmark comparison (if benchmark provided and full mode)
-    if (benchmark && benchmark.values && benchmark.values.length > 0 && mode.toLowerCase() === 'full') {
-      metrics['      '] = blank; // Seventh spacer
-      
-      try {
-        const cleanBenchmark = utils.prepareReturns(benchmark.values, rfRate, false);
-        if (cleanBenchmark.length === cleanReturns.length) {
-          const beta = stats.beta(cleanReturns, cleanBenchmark, false);
-          const alpha = stats.alpha(cleanReturns, cleanBenchmark, rfRate, false);
-          const correlation = stats.correlation(cleanReturns, cleanBenchmark, false);
-          const treynor = stats.treynor(cleanReturns, cleanBenchmark, rfRate, false);
-          
-          metrics['Beta'] = beta.toFixed(2);
-          metrics['Alpha'] = alpha.toFixed(2);
-          metrics['Correlation'] = (correlation * pct).toFixed(2) + '%';
-          metrics['Treynor Ratio'] = (treynor * pct).toFixed(2) + '%';
-        } else {
-          metrics['Beta'] = '-';
-          metrics['Alpha'] = '-';
-          metrics['Correlation'] = '-';
-          metrics['Treynor Ratio'] = '-';
-        }
-      } catch (error) {
-        console.warn('Error calculating benchmark metrics:', error.message);
-        metrics['Beta'] = '-';
-        metrics['Alpha'] = '-';
-        metrics['Correlation'] = '-';
-        metrics['Treynor Ratio'] = '-';
-      }
     }
     
     return metrics;
@@ -2675,46 +2632,4 @@ function calculateYearlyWinRate(returns) {
   
   const wins = yearlyReturns.filter(r => r > 0).length;
   return wins / yearlyReturns.length;
-}
-
-function calculateCovariance(x, y) {
-  if (x.length !== y.length || x.length === 0) {
-    return 0;
-  }
-  
-  const meanX = x.reduce((sum, val) => sum + val, 0) / x.length;
-  const meanY = y.reduce((sum, val) => sum + val, 0) / y.length;
-  
-  const covariance = x.reduce((sum, xi, i) => {
-    return sum + (xi - meanX) * (y[i] - meanY);
-  }, 0) / (x.length - 1);
-  
-  return covariance;
-}
-
-function calculateVariance(arr) {
-  if (arr.length === 0) {
-    return 0;
-  }
-  
-  const mean = arr.reduce((sum, val) => sum + val, 0) / arr.length;
-  const variance = arr.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / (arr.length - 1);
-  
-  return variance;
-}
-
-function calculateCorrelation(x, y) {
-  if (x.length !== y.length || x.length === 0) {
-    return 0;
-  }
-  
-  const covariance = calculateCovariance(x, y);
-  const stdX = Math.sqrt(calculateVariance(x));
-  const stdY = Math.sqrt(calculateVariance(y));
-  
-  if (stdX === 0 || stdY === 0) {
-    return 0;
-  }
-  
-  return covariance / (stdX * stdY);
 }

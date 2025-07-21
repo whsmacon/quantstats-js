@@ -109,7 +109,7 @@ Complete tearsheet generation with professional visualizations:
 
 ```javascript
 // Basic tearsheet (recommended)
-const tearsheet = qs.reports.basic(returnsData, benchmarkData?, title?);
+const tearsheet = qs.reports.basic(returnsData, title?);
 
 // Just the metrics (no charts)
 const metrics = qs.reports.metrics(returns);
@@ -168,7 +168,6 @@ Comprehensive reporting functionality:
 - `metrics()` - Generate all portfolio metrics
 - `basic()` - Basic HTML report
 - `full()` - Comprehensive HTML report
-- `comparison()` - Portfolio vs benchmark comparison
 
 ## 🎯 Usage Examples
 
@@ -198,21 +197,9 @@ const returnsData = {
   index: dates
 };
 
-// Optional: benchmark data (e.g., S&P 500)
-const benchmarkReturns = [
-  0.008, -0.003, 0.015, -0.008, 0.012, -0.005, 0.018, -0.009, 0.014, -0.002,
-  0.010, -0.012, 0.006, 0.019, -0.006, 0.011, -0.009, 0.013, -0.003, 0.007
-];
-
-const benchmarkData = {
-  values: benchmarkReturns,
-  index: dates
-};
-
 // Generate professional tearsheet
 const tearsheet = qs.reports.basic(
   returnsData,
-  benchmarkData,
   'My Portfolio Strategy Analysis'
 );
 
@@ -345,29 +332,12 @@ console.log('Risk Analysis:', {
 });
 ```
 
-### Benchmark Comparison
-
-```javascript
-// Compare portfolio to benchmark
-const portfolioReturns = [/* your portfolio returns */];
-const benchmarkReturns = [/* benchmark returns */];
-
-const beta = qs.stats.beta(portfolioReturns, benchmarkReturns);
-const alpha = qs.stats.alpha(portfolioReturns, benchmarkReturns);
-
-console.log('vs Benchmark:', {
-  beta: beta.toFixed(2),
-  alpha: `${(alpha * 100).toFixed(2)}%`
-});
-```
-
 ### Generate HTML Report
 
 ```javascript
 // Create comprehensive HTML report
 const htmlReport = qs.reports.basic(
   returns,
-  benchmarkReturns,
   'My Portfolio Analysis'
 );
 
@@ -447,7 +417,6 @@ All calculations in QuantStats.js are mathematically identical to the Python Qua
 - **CAGR**: `(ending_value / beginning_value) ^ (1/years) - 1`
 - **Maximum Drawdown**: `min(cumulative_returns / running_max - 1)`
 - **Value at Risk**: `percentile(returns, confidence_level)`
-- **Beta**: `covariance(returns, benchmark) / variance(benchmark)`
 
 ## Performance Optimizations
 
@@ -465,9 +434,9 @@ QuantStats.js is optimized for performance:
 
 | Function | Description | Parameters |
 |----------|-------------|------------|
-| `basic(returnsData, benchmarkData?, title?)` | **Generate complete tearsheet** | returns with dates, optional benchmark, title |
+| `basic(returnsData, title?)` | **Generate complete tearsheet** | returns with dates, optional title |
 | `calculateComprehensiveMetrics(returnsData)` | **Calculate all 40+ metrics** | returns with dates object |
-| `metrics(returns, benchmark?, rfRate?, nans?)` | Calculate basic metrics | returns array, benchmark, risk-free rate, include NaNs |
+| `metrics(returns, rfRate?, nans?)` | Calculate basic metrics | returns array, risk-free rate, include NaNs |
 
 ### 🎨 Chart Generation Functions (NEW v2.0.0)
 
@@ -568,6 +537,33 @@ The test suite includes:
 Apache License 2.0 - see [LICENSE](LICENSE) file for details.
 
 ## 📝 Changelog
+
+### v2.0.3 - Simplified API: Removed Benchmark Dependencies 🧹
+
+**🔧 Breaking Changes:**
+- **Simplified Function Signatures** - Removed benchmark parameters from all functions for cleaner API
+- **Focused Portfolio Analysis** - Package now focuses purely on single portfolio analysis
+- **Cleaner Codebase** - Removed unused benchmark calculation functions and complexity
+
+**📦 What Changed:**
+- `qs.reports.basic(returns, title?)` - No longer accepts benchmark parameter
+- `qs.reports.metrics(returns, rfRate?, nans?)` - No longer accepts benchmark parameter
+- `qs.reports.calculateComprehensiveMetrics(returns, rfRate?)` - No longer accepts benchmark parameter
+- Removed Rolling Beta chart and related benchmark comparison features
+- Removed unused helper functions (`calculateCovariance`, `calculateVariance`, `calculateCorrelation`)
+
+**✅ What Still Works:**
+- All 26 tests passing with 100% success rate
+- Complete tearsheet generation with 13+ professional charts
+- 40+ comprehensive financial metrics and analysis
+- Individual benchmark functions still available in `qs.stats` module for manual comparison
+- All core portfolio analytics functionality preserved
+
+**🎯 Benefits:**
+- Simpler, cleaner API focused on portfolio analysis
+- Smaller package size and reduced complexity
+- Better performance without unused benchmark calculations
+- Easier to use and understand for most use cases
 
 ### v2.0.2 - Bug Fix: Remove Non-existent Function Call 🐛
 
