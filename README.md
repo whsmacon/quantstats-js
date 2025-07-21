@@ -569,6 +569,20 @@ Apache License 2.0 - see [LICENSE](LICENSE) file for details.
 
 ## 📝 Changelog
 
+### v2.0.1 - Documentation & Discoverability Enhancements 📚
+
+**🔧 Improvements:**
+- **Enhanced Package Description** - More descriptive npm package summary highlighting key features
+- **Expanded Keywords** - Added comprehensive keywords for better npm search discoverability
+- **Professional Presentation** - Improved README introduction and feature descriptions
+- **Search Optimization** - Better npm package metadata for community discovery
+
+**📦 Package Quality:**
+- All 26 tests passing with 100% coverage
+- Zero dependencies for core functionality
+- Production-ready codebase with comprehensive documentation
+- Professional npm package presentation
+
 ### v2.0.0 - Major Release: Professional Tearsheet Generation 🎉
 
 **🚀 MAJOR NEW FEATURES:**
