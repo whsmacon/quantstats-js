@@ -832,7 +832,7 @@ def metrics(
     else:
         metrics["Total Return %"] = (df.sum() * pct).map("{:,.2f}".format)
 
-    metrics["CAGR﹪%"] = _stats.cagr(df, rf, compounded) * pct
+    metrics["CAGR%%"] = _stats.cagr(df, rf, compounded) * pct
 
     metrics["~~~~~~~~~~~~~~"] = blank
 

@@ -2041,7 +2041,7 @@ export function calculateComprehensiveMetrics(returns, rfRate = 0.02, mode = 'ba
     const maxDrawdown = stats.maxDrawdown(cleanReturns, false);
     
     metrics['Cumulative Return %'] = (totalReturn * pct).toFixed(2) + '%';
-    metrics['CAGR﹪'] = (cagr * pct).toFixed(2) + '%';
+    metrics['CAGR%'] = (cagr * pct).toFixed(2) + '%';
     
     // Risk metrics
     const sortino = stats.sortino(cleanReturns, rfRate, 252, false);

@@ -163,7 +163,7 @@ console.log(everything);
 //   'Risk-Free Rate %': '2.00%',
 //   'Time in Market %': '100.00%',
 //   'Cumulative Return %': '5.47%',
-//   'CAGR﹪': '2.34%',
+//   'CAGR%': '2.34%',
 //   'Sharpe': '1.23',
 //   'Prob. Sharpe Ratio %': '87.23%',
 //   'Smart Sharpe': '1.23',
@@ -392,7 +392,7 @@ const metrics = qs.reports.calculateComprehensiveMetrics(returnsData);
 
 console.log('📊 Performance Metrics:');
 console.log(`Total Return: ${metrics['Cumulative Return %']}`);
-console.log(`CAGR: ${metrics['CAGR﹪']}`);
+console.log(`CAGR: ${metrics['CAGR%']}`);
 console.log(`Sharpe Ratio: ${metrics['Sharpe']}`);
 console.log(`Sortino Ratio: ${metrics['Sortino']}`);
 console.log(`Max Drawdown: ${metrics['Max Drawdown %']}`);
