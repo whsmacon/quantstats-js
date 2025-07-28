@@ -2248,7 +2248,7 @@ function generateMetricsTable(metrics, benchmarkMetrics = null, benchmarkTitle =
   // Create headers
   const hasThreeColumns = benchmarkMetrics !== null;
   const headers = hasThreeColumns 
-    ? `<tr><th>Metric</th><th>${benchmarkTitle}</th><th>Strategy</th></tr>`
+    ? `<tr><th>Metric</th><th>${benchmarkTitle}</th><th>Strategy</th><th>Diff</th></tr>`
     : `<tr><th>Metric</th><th>Strategy</th></tr>`;
   
   let tableRows = '';
@@ -2259,6 +2259,8 @@ function generateMetricsTable(metrics, benchmarkMetrics = null, benchmarkTitle =
       // Add green highlighting for better performer
       let benchmarkStyle = '';
       let strategyStyle = '';
+      let diffValue = '-';
+      let diffStyle = '';
       
       // Only compare if both values are numeric (not '-' or text)
       if (benchmarkValue !== '-' && value !== '-') {
@@ -2274,6 +2276,23 @@ function generateMetricsTable(metrics, benchmarkMetrics = null, benchmarkTitle =
         const strategyNum = parseValue(value);
         
         if (!isNaN(benchmarkNum) && !isNaN(strategyNum)) {
+          // Calculate percentage difference: (Strategy - Benchmark) / |Benchmark| * 100
+          let percentDiff = 0;
+          if (benchmarkNum !== 0) {
+            percentDiff = ((strategyNum - benchmarkNum) / Math.abs(benchmarkNum)) * 100;
+            
+            // Check if the difference is essentially zero
+            if (Math.abs(percentDiff) < 0.05) {
+              diffValue = '-';
+            } else {
+              const sign = percentDiff >= 0 ? '+' : '';
+              diffValue = `${sign}${percentDiff.toFixed(1)}%`;
+            }
+            
+            // Make diff text smaller and bold, but no color
+            diffStyle = 'font-size: 12px; font-weight: bold;';
+          }
+          
           // Special handling for specific metrics
           let benchmarkBetter = false;
           let strategyBetter = false;
@@ -2308,7 +2327,7 @@ function generateMetricsTable(metrics, benchmarkMetrics = null, benchmarkTitle =
         }
       }
       
-      tableRows += `<tr><td>${key}</td><td style="${benchmarkStyle}">${benchmarkValue}</td><td style="${strategyStyle}">${value}</td></tr>\n`;
+      tableRows += `<tr><td>${key}</td><td style="${benchmarkStyle}">${benchmarkValue}</td><td style="${strategyStyle}">${value}</td><td style="${diffStyle}">${diffValue}</td></tr>\n`;
     } else {
       tableRows += `<tr><td>${key}</td><td>${value}</td></tr>\n`;
     }
@@ -2326,13 +2345,13 @@ function generateMetricsTable(metrics, benchmarkMetrics = null, benchmarkTitle =
 
 function generateEOYTable(returns, benchmark = null, benchmarkTitle = 'Benchmark') {
   if (!returns || !returns.values || !returns.index) {
-    const headers = benchmark ? `<tr><th>Year</th><th>${benchmarkTitle}</th><th>Strategy</th></tr>` : `<tr><th>Year</th><th>Return</th></tr>`;
+    const headers = benchmark ? `<tr><th>Year</th><th>${benchmarkTitle}</th><th>Strategy</th><th>Diff</th></tr>` : `<tr><th>Year</th><th>Return</th></tr>`;
     return `<table>
       <thead>
         ${headers}
       </thead>
       <tbody>
-        <tr><td>2023</td><td>1.79%</td>${benchmark ? '<td>2.15%</td>' : ''}</tr>
+        <tr><td>2023</td><td>1.79%</td>${benchmark ? '<td>2.15%</td><td style="color: #4caf50; font-weight: bold;">+20.1%</td>' : ''}</tr>
       </tbody>
     </table>`;
   }
@@ -2389,10 +2408,29 @@ function generateEOYTable(returns, benchmark = null, benchmarkTitle = 'Benchmark
         const benchmarkFormatted = benchmarkReturns.length > 0 ? (benchmarkTotalReturn * 100).toFixed(2) + '%' : '-';
         const strategyFormatted = strategyReturns.length > 0 ? (strategyTotalReturn * 100).toFixed(2) + '%' : '-';
 
+        // Calculate percentage difference
+        let diffValue = '-';
+        let diffStyle = '';
+        if (benchmarkReturns.length > 0 && strategyReturns.length > 0 && benchmarkTotalReturn !== 0) {
+          const percentDiff = ((strategyTotalReturn - benchmarkTotalReturn) / Math.abs(benchmarkTotalReturn)) * 100;
+          
+          // Check if the difference is essentially zero
+          if (Math.abs(percentDiff) < 0.05) {
+            diffValue = '-';
+          } else {
+            const sign = percentDiff >= 0 ? '+' : '';
+            diffValue = `${sign}${percentDiff.toFixed(1)}%`;
+          }
+          
+          // Make diff text smaller and bold, but no color
+          diffStyle = 'font-size: 12px; font-weight: bold;';
+        }
+
         tableRows += `<tr>
           <td>${year}</td>
           <td style="${benchmarkTotalReturn > strategyTotalReturn ? 'color: #4caf50; font-weight: bold;' : ''}">${benchmarkFormatted}</td>
           <td style="${strategyTotalReturn > benchmarkTotalReturn ? 'color: #4caf50; font-weight: bold;' : ''}">${strategyFormatted}</td>
+          <td style="${diffStyle}">${diffValue}</td>
         </tr>\n`;
       } else {
         tableRows += `<tr><td>${year}</td><td>${(strategyTotalReturn * 100).toFixed(2)}%</td></tr>\n`;
@@ -2400,7 +2438,7 @@ function generateEOYTable(returns, benchmark = null, benchmarkTitle = 'Benchmark
     });
     
     const headers = benchmark 
-      ? `<tr><th>Year</th><th>${benchmarkTitle}</th><th>Strategy</th></tr>`
+      ? `<tr><th>Year</th><th>${benchmarkTitle}</th><th>Strategy</th><th>Diff</th></tr>`
       : `<tr><th>Year</th><th>Return</th></tr>`;
     
     return `<table>
@@ -2408,18 +2446,18 @@ function generateEOYTable(returns, benchmark = null, benchmarkTitle = 'Benchmark
         ${headers}
       </thead>
       <tbody>
-        ${tableRows || '<tr><td colspan="' + (benchmark ? '3' : '2') + '">No data available</td></tr>'}
+        ${tableRows || '<tr><td colspan="' + (benchmark ? '4' : '2') + '">No data available</td></tr>'}
       </tbody>
     </table>`;
   } catch (error) {
     console.warn('Error generating EOY table:', error.message);
-    const headers = benchmark ? `<tr><th>Year</th><th>${benchmarkTitle}</th><th>Strategy</th></tr>` : `<tr><th>Year</th><th>Return</th></tr>`;
+    const headers = benchmark ? `<tr><th>Year</th><th>${benchmarkTitle}</th><th>Strategy</th><th>Diff</th></tr>` : `<tr><th>Year</th><th>Return</th></tr>`;
     return `<table>
       <thead>
         ${headers}
       </thead>
       <tbody>
-        <tr><td colspan="${benchmark ? '3' : '2'}">Error loading data</td></tr>
+        <tr><td colspan="${benchmark ? '4' : '2'}">Error loading data</td></tr>
       </tbody>
     </table>`;
   }
