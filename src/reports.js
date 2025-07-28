@@ -1492,21 +1492,90 @@ function generateReturnsDistributionChart(returns, dates, title = 'Returns Distr
 }
 
 /**
+ * Normalize two time series to have the same date range (intersection)
+ * @param {Object} series1 - First series with {values: [], index: []}
+ * @param {Object} series2 - Second series with {values: [], index: []}
+ * @returns {Object} {series1: normalized, series2: normalized}
+ */
+function normalizeDateRanges(series1, series2) {
+  if (!series1?.index || !series2?.index) {
+    return { series1, series2 };
+  }
+
+  // Convert dates to timestamps for easier comparison
+  const dates1 = series1.index.map(d => d.getTime());
+  const dates2 = series2.index.map(d => d.getTime());
+
+  // Find the overlapping date range
+  const startTime = Math.max(Math.min(...dates1), Math.min(...dates2));
+  const endTime = Math.min(Math.max(...dates1), Math.max(...dates2));
+
+  // Filter both series to the overlapping range
+  const normalizedSeries1 = {
+    values: [],
+    index: []
+  };
+  
+  const normalizedSeries2 = {
+    values: [],
+    index: []
+  };
+
+  // Filter series1
+  series1.index.forEach((date, i) => {
+    const time = date.getTime();
+    if (time >= startTime && time <= endTime) {
+      normalizedSeries1.values.push(series1.values[i]);
+      normalizedSeries1.index.push(date);
+    }
+  });
+
+  // Filter series2
+  series2.index.forEach((date, i) => {
+    const time = date.getTime();
+    if (time >= startTime && time <= endTime) {
+      normalizedSeries2.values.push(series2.values[i]);
+      normalizedSeries2.index.push(date);
+    }
+  });
+
+  return {
+    series1: normalizedSeries1,
+    series2: normalizedSeries2
+  };
+}
+
+/**
  * Generate basic HTML report exactly matching Python QuantStats format
  */
 export function basic(returns, title = 'Portfolio Performance Report', rfRate = 0, nans = false, benchmark = null, benchmarkTitle = 'Benchmark') {
-  // Use actual dates from the data - NO FALLBACKS
-  const startDate = returns?.index?.[0]?.toISOString().split('T')[0];
-  const endDate = returns?.index?.[returns.index.length - 1]?.toISOString().split('T')[0];
+  let normalizedReturns = returns;
+  let normalizedBenchmark = benchmark;
+
+  // Normalize date ranges if benchmark is provided
+  if (benchmark && benchmark.index && returns.index) {
+    const normalized = normalizeDateRanges(returns, benchmark);
+    normalizedReturns = normalized.series1;
+    normalizedBenchmark = normalized.series2;
+    
+    console.log(`Date range normalized:
+      Original strategy: ${returns.index.length} periods (${returns.index[0]?.toISOString().split('T')[0]} to ${returns.index[returns.index.length-1]?.toISOString().split('T')[0]})
+      Original benchmark: ${benchmark.index.length} periods (${benchmark.index[0]?.toISOString().split('T')[0]} to ${benchmark.index[benchmark.index.length-1]?.toISOString().split('T')[0]})
+      Normalized: ${normalizedReturns.index.length} periods (${normalizedReturns.index[0]?.toISOString().split('T')[0]} to ${normalizedReturns.index[normalizedReturns.index.length-1]?.toISOString().split('T')[0]})`);
+  }
+
+  // Use actual dates from the normalized data
+  const startDate = normalizedReturns?.index?.[0]?.toISOString().split('T')[0];
+  const endDate = normalizedReturns?.index?.[normalizedReturns.index.length - 1]?.toISOString().split('T')[0];
   const dateRange = `${startDate} - ${endDate}`;
 
-  // Calculate actual comprehensive metrics using real data - NO FALLBACKS
-  const performanceMetrics = calculateComprehensiveMetrics(returns, rfRate, 'full');
+  // Calculate actual comprehensive metrics using normalized data
+  const performanceMetrics = calculateComprehensiveMetrics(normalizedReturns, rfRate, 'full');
   
-  // Calculate benchmark metrics if provided
+  // Calculate benchmark metrics if provided (using normalized data)
   let benchmarkMetrics = null;
-  if (benchmark) {
-    benchmarkMetrics = calculateComprehensiveMetrics(benchmark, rfRate, 'full');
+  if (normalizedBenchmark) {
+    benchmarkMetrics = calculateComprehensiveMetrics(normalizedBenchmark, rfRate, 'full');
   }
 
   const html = `<!DOCTYPE html>
@@ -1922,43 +1991,43 @@ export function basic(returns, title = 'Portfolio Performance Report', rfRate = 
       <div class="content">
         <div id="left">
         <div>
-          ${generateCumulativeReturnsChart(returns.values, returns.index, 'Cumulative Returns')}
+          ${generateCumulativeReturnsChart(normalizedReturns.values, normalizedReturns.index, 'Cumulative Returns')}
         </div>
         <div id="log_returns">
-          ${generateLogReturnsChart(returns.values, returns.index, 'Log Returns')}
+          ${generateLogReturnsChart(normalizedReturns.values, normalizedReturns.index, 'Log Returns')}
         </div>
         <div id="vol_returns">
-          ${generateVolReturnsChart(returns, returns.index || null)}
+          ${generateVolReturnsChart(normalizedReturns, normalizedReturns.index || null)}
         </div>
         <div id="eoy_returns">
-          ${generateEOYReturnsChart(returns, returns.index || null)}
+          ${generateEOYReturnsChart(normalizedReturns, normalizedReturns.index || null)}
         </div>
         <div id="monthly_dist">
-          ${generateMonthlyDistChart(returns, returns.index || null)}
+          ${generateMonthlyDistChart(normalizedReturns, normalizedReturns.index || null)}
         </div>
         <div id="daily_returns">
-          ${generateDailyReturnsChart(returns, returns.index || null)}
+          ${generateDailyReturnsChart(normalizedReturns, normalizedReturns.index || null)}
         </div>
         <div id="rolling_vol">
-          ${generateRollingVolatilityChart(returns, returns.index || null)}
+          ${generateRollingVolatilityChart(normalizedReturns, normalizedReturns.index || null)}
         </div>
         <div id="rolling_sharpe">
-          ${generateRollingSharpeChart(returns, returns.index || null)}
+          ${generateRollingSharpeChart(normalizedReturns, normalizedReturns.index || null)}
         </div>
         <div id="rolling_sortino">
-          ${generateRollingSortinoChart(returns, returns.index || null)}
+          ${generateRollingSortinoChart(normalizedReturns, normalizedReturns.index || null)}
         </div>
         <div id="dd_periods">
-          ${generateDrawdownPeriodsChart(returns, returns.index || null)}
+          ${generateDrawdownPeriodsChart(normalizedReturns, normalizedReturns.index || null)}
         </div>
         <div id="dd_plot">
-          ${generateDrawdownSVG(returns.values, null, 'Drawdowns')}
+          ${generateDrawdownSVG(normalizedReturns.values, null, 'Drawdowns')}
         </div>
         <div id="monthly_heatmap">
-          ${generateMonthlyHeatmapChart(returns, returns.index || null)}
+          ${generateMonthlyHeatmapChart(normalizedReturns, normalizedReturns.index || null)}
         </div>
         <div id="returns_dist">
-          ${generateReturnsDistributionChart(returns, returns.index || null)}
+          ${generateReturnsDistributionChart(normalizedReturns, normalizedReturns.index || null)}
         </div>
       </div>
 
@@ -1968,12 +2037,12 @@ export function basic(returns, title = 'Portfolio Performance Report', rfRate = 
 
         <div id="eoy">
           <h3>End of Year Returns</h3>
-          ${generateEOYTable(returns)}
+          ${generateEOYTable(normalizedReturns)}
         </div>
 
         <div id="ddinfo">
           <h3>Worst 30 Drawdowns</h3>
-          ${generateDrawdownTable(returns)}
+          ${generateDrawdownTable(normalizedReturns)}
         </div>
       </div>
     </div>

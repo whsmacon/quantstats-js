@@ -739,6 +739,44 @@ Apache License 2.0 - see [LICENSE](LICENSE) file for details.
 
 ## 📝 Changelog
 
+### v2.1.1 - Date Range Normalization for Benchmarks 📅
+
+**🔧 CRITICAL FIX:**
+
+**📅 Date Range Normalization:**
+- **Automatic Date Alignment** - When comparing strategy vs benchmark, both series are automatically normalized to the same time period
+- **Intersection Logic** - Uses the overlapping date range between strategy and benchmark data
+- **All Charts Updated** - Ensures all visualizations use the normalized timeframe for accurate comparison
+- **Console Logging** - Shows normalization details for transparency
+
+**🎯 How It Works:**
+```javascript
+// If strategy has 100 days (2023-01-01 to 2023-04-10)
+// And benchmark has 60 days (2023-01-20 to 2023-03-20)
+// Both will be normalized to 60 days (2023-01-20 to 2023-03-20)
+
+const report = qs.reports.basic(
+  strategyReturns,    // 100 periods
+  'My Strategy',
+  0, false,
+  benchmarkReturns,   // 60 periods (offset)
+  'S&P 500'
+);
+// Result: Both series use the same 60-day overlapping period
+```
+
+**✅ Quality Assurance:**
+- All 26 tests passing with 100% success rate
+- Backward compatible - no changes to existing API
+- Automatic detection and normalization when benchmark provided
+- Detailed logging shows original vs normalized date ranges
+
+**🎯 Benefits:**
+- Ensures fair comparison between strategy and benchmark
+- Eliminates timeframe bias in performance analysis
+- Maintains data integrity while maximizing comparable periods
+- Professional-grade benchmark analysis
+
 ### v2.1.0 - Benchmark Comparison Feature 🆚
 
 **🚀 NEW FEATURES:**
