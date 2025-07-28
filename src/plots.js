@@ -262,11 +262,6 @@ export function snapshot(returns, nans = false) {
 export function exportPlotData(plotData, filename = null) {
   const jsonData = JSON.stringify(plotData, null, 2);
   
-  if (filename) {
-    // In Node.js environment, you might want to write to file
-    console.log(`Plot data exported. Use fs.writeFileSync('${filename}', jsonData) to save.`);
-  }
-  
   return jsonData;
 }
 
