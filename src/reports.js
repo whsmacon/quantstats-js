@@ -72,61 +72,6 @@ export function metrics(returns, rfRate = 0, nans = false) {
  * Generate SVG chart for equity curve
  */
 /**
- * Generate SVG chart for drawdown
- */
-function generateDrawdownSVG(data, dates, title = 'Underwater Plot') {
-  // Handle different data formats - if it's already an array, use it directly
-  let values;
-  if (Array.isArray(data)) {
-    values = data;
-  } else if (data && data.data) {
-    values = data.data;
-  } else {
-    return '<div>No drawdown data available</div>';
-  }
-  
-  if (!values || values.length === 0) return '<div>No drawdown data available</div>';
-  
-  const width = 576;
-  const height = 360;
-  const margin = { top: 40, right: 40, bottom: 80, left: 60 };
-  const chartWidth = width - margin.left - margin.right;
-  const chartHeight = height - margin.top - margin.bottom;
-  
-  const minValue = Math.min(...values, 0);
-  const maxValue = 0;
-  const valueRange = maxValue - minValue;
-  
-  // Generate area path data
-  const pathData = values.map((value, index) => {
-    const x = margin.left + (index / (values.length - 1)) * chartWidth;
-    const y = margin.top + ((maxValue - value) / valueRange) * chartHeight;
-    return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
-  }).join(' ');
-  
-  const baselineY = margin.top + chartHeight;
-  const areaPath = pathData + ` L ${margin.left + chartWidth} ${baselineY} L ${margin.left} ${baselineY} Z`;
-  
-  return `<div>
-<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="400" viewBox="0 0 ${width} ${height}" style="max-width: 100%; height: auto;">
-  <defs>
-    <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
-  </defs>
-  <g>
-    <rect x="0" y="0" width="${width}" height="${height}" style="fill: #ffffff"/>
-    <rect x="${margin.left}" y="${margin.top}" width="${chartWidth}" height="${chartHeight}" style="fill: #ffffff"/>
-    <path d="${areaPath}" style="fill: #ff7f0e; fill-opacity: 0.6; stroke: #ff7f0e; stroke-width: 1"/>
-    <text x="${width/2}" y="25" style="font: 14px Arial; text-anchor: middle; fill: #000000">${title}</text>
-    <text x="${margin.left}" y="${height - 20}" style="font: 12px Arial; fill: #666666">Start</text>
-    <text x="${width - margin.right}" y="${height - 20}" style="font: 12px Arial; text-anchor: end; fill: #666666">End</text>
-    <text x="20" y="${margin.top + 10}" style="font: 12px Arial; fill: #666666">0%</text>
-    <text x="20" y="${height - margin.bottom + 10}" style="font: 12px Arial; fill: #666666">${(minValue * 100).toFixed(1)}%</text>
-  </g>
-</svg>
-</div>`;
-}
-
-/**
  * Generate cumulative returns chart (like Python QuantStats)
  */
 function generateCumulativeReturnsChart(returns, dates, title = 'Cumulative Returns', logScale = false) {
@@ -276,7 +221,7 @@ function generateCumulativeReturnsChart(returns, dates, title = 'Cumulative Retu
     }).join('')}
     
     <!-- Chart title -->
-    <text x="${width/2}" y="25" text-anchor="middle" font-size="16" font-weight="600" 
+    <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" 
           fill="#333" font-family="Arial, sans-serif">${title}</text>
     
     <!-- Time labels -->
@@ -1787,26 +1732,11 @@ export function basic(returns, title = 'Portfolio Performance Report', rfRate = 
         font-weight: 600;
         background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
       }
-      #eoy table td:after {
-        content: '%';
-      }
-      #eoy table td:first-of-type:after,
-      #eoy table td:last-of-type:after,
-      #eoy table td:nth-of-type(4):after {
-        content: '';
-      }
       #eoy table th {
         text-align: right;
       }
       #eoy table th:first-of-type {
         text-align: left;
-      }
-      #eoy table td:after {
-        content: '%';
-      }
-      #eoy table td:first-of-type:after,
-      #eoy table td:last-of-type:after {
-        content: '';
       }
       #ddinfo table td:nth-of-type(4):after {
         content: '%';
@@ -1960,6 +1890,9 @@ export function basic(returns, title = 'Portfolio Performance Report', rfRate = 
       
       <div class="content">
         <div id="left">
+        <div id="monthly_heatmap">
+          ${generateMonthlyHeatmapChart(normalizedReturns, normalizedReturns.index || null)}
+        </div>
         <div>
           ${generateCumulativeReturnsChart(normalizedReturns.values, normalizedReturns.index, 'Cumulative Returns')}
         </div>
@@ -1989,12 +1922,6 @@ export function basic(returns, title = 'Portfolio Performance Report', rfRate = 
         </div>
         <div id="dd_periods">
           ${generateDrawdownPeriodsChart(normalizedReturns, normalizedReturns.index || null)}
-        </div>
-        <div id="dd_plot">
-          ${generateDrawdownSVG(normalizedReturns.values, null, 'Drawdowns')}
-        </div>
-        <div id="monthly_heatmap">
-          ${generateMonthlyHeatmapChart(normalizedReturns, normalizedReturns.index || null)}
         </div>
         <div id="returns_dist">
           ${generateReturnsDistributionChart(normalizedReturns, normalizedReturns.index || null)}
@@ -2352,25 +2279,36 @@ function generateMetricsTable(metrics, benchmarkMetrics = null, benchmarkTitle =
         const strategyNum = parseValue(value);
         
         if (!isNaN(benchmarkNum) && !isNaN(strategyNum)) {
-          // For metrics like Max Drawdown, lower is better (contains "Drawdown" or starts with negative)
-          const isLowerBetter = key.toLowerCase().includes('drawdown') || 
-                               key.toLowerCase().includes('risk') ||
-                               key.toLowerCase().includes('var') ||
-                               key.toLowerCase().includes('volatility');
+          // Special handling for specific metrics
+          let benchmarkBetter = false;
+          let strategyBetter = false;
           
-          if (isLowerBetter) {
-            if (benchmarkNum < strategyNum) {
-              benchmarkStyle = 'color: #4caf50; font-weight: bold;';
-            } else if (strategyNum < benchmarkNum) {
-              strategyStyle = 'color: #4caf50; font-weight: bold;';
-            }
+          if (key.toLowerCase().includes('max drawdown')) {
+            // For Max Drawdown, higher number is better (closer to zero)
+            // e.g., -5% is better than -10%
+            benchmarkBetter = benchmarkNum > strategyNum;
+            strategyBetter = strategyNum > benchmarkNum;
+          } else if (key.toLowerCase().includes('longest dd') || 
+                    key.toLowerCase().includes('drawdown days')) {
+            // For Longest DD Days, lower is better
+            benchmarkBetter = benchmarkNum < strategyNum;
+            strategyBetter = strategyNum < benchmarkNum;
+          } else if (key.toLowerCase().includes('risk') ||
+                    key.toLowerCase().includes('var') ||
+                    key.toLowerCase().includes('volatility')) {
+            // For risk metrics, lower is better
+            benchmarkBetter = benchmarkNum < strategyNum;
+            strategyBetter = strategyNum < benchmarkNum;
           } else {
-            // Higher is better for most metrics
-            if (benchmarkNum > strategyNum) {
-              benchmarkStyle = 'color: #4caf50; font-weight: bold;';
-            } else if (strategyNum > benchmarkNum) {
-              strategyStyle = 'color: #4caf50; font-weight: bold;';
-            }
+            // For most metrics (returns, ratios), higher is better
+            benchmarkBetter = benchmarkNum > strategyNum;
+            strategyBetter = strategyNum > benchmarkNum;
+          }
+          
+          if (benchmarkBetter) {
+            benchmarkStyle = 'color: #4caf50; font-weight: bold;';
+          } else if (strategyBetter) {
+            strategyStyle = 'color: #4caf50; font-weight: bold;';
           }
         }
       }
