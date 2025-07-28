@@ -1494,7 +1494,7 @@ function generateReturnsDistributionChart(returns, dates, title = 'Returns Distr
 /**
  * Generate basic HTML report exactly matching Python QuantStats format
  */
-export function basic(returns, title = 'Portfolio Performance Report', rfRate = 0, nans = false) {
+export function basic(returns, title = 'Portfolio Performance Report', rfRate = 0, nans = false, benchmark = null, benchmarkTitle = 'Benchmark') {
   // Use actual dates from the data - NO FALLBACKS
   const startDate = returns?.index?.[0]?.toISOString().split('T')[0];
   const endDate = returns?.index?.[returns.index.length - 1]?.toISOString().split('T')[0];
@@ -1502,6 +1502,12 @@ export function basic(returns, title = 'Portfolio Performance Report', rfRate = 
 
   // Calculate actual comprehensive metrics using real data - NO FALLBACKS
   const performanceMetrics = calculateComprehensiveMetrics(returns, rfRate, 'full');
+  
+  // Calculate benchmark metrics if provided
+  let benchmarkMetrics = null;
+  if (benchmark) {
+    benchmarkMetrics = calculateComprehensiveMetrics(benchmark, rfRate, 'full');
+  }
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -1908,7 +1914,7 @@ export function basic(returns, title = 'Portfolio Performance Report', rfRate = 
     <div class="container">
       <div class="header">
         <h1>
-          ${title}
+          ${title}${benchmark ? `<br><small style="font-size: 0.6em; font-weight: normal; color: #666;">Benchmarked Against ${benchmarkTitle}</small>` : ''}
           <dt>${dateRange}</dt>
         </h1>
       </div>
@@ -1958,7 +1964,7 @@ export function basic(returns, title = 'Portfolio Performance Report', rfRate = 
 
       <div id="right">
         <h3>Key Performance Metrics</h3>
-        ${generateMetricsTable(performanceMetrics)}
+        ${generateMetricsTable(performanceMetrics, benchmarkMetrics, benchmarkTitle)}
 
         <div id="eoy">
           <h3>End of Year Returns</h3>
@@ -1991,9 +1997,9 @@ export function basic(returns, title = 'Portfolio Performance Report', rfRate = 
 /**
  * Generate HTML tearsheet report
  */
-export function html(returns, filename = 'quantstats_report.html', title = null, rfRate = 0, nans = false) {
+export function html(returns, filename = 'quantstats_report.html', title = null, rfRate = 0, nans = false, benchmark = null, benchmarkTitle = 'Benchmark') {
   const reportTitle = title || 'Portfolio Performance Report';
-  const htmlContent = basic(returns, reportTitle, rfRate, nans);
+  const htmlContent = basic(returns, reportTitle, rfRate, nans, benchmark, benchmarkTitle);
   
   console.log(`HTML report generated. Use fs.writeFileSync('${filename}', htmlContent) to save.`);
   
@@ -2006,7 +2012,7 @@ export function html(returns, filename = 'quantstats_report.html', title = null,
 export { metrics as performanceMetrics };
 
 // Helper functions for HTML generation
-export function calculateComprehensiveMetrics(returns, rfRate = 0.02, mode = 'basic') {
+export function calculateComprehensiveMetrics(returns, rfRate = 0, mode = 'basic') {
   if (!returns || !returns.values || returns.values.length === 0 || !returns.index) {
     throw new Error('Invalid returns data provided - missing values or index');
   }
@@ -2277,13 +2283,27 @@ export function calculateComprehensiveMetrics(returns, rfRate = 0.02, mode = 'ba
   }
 }
 
-function generateMetricsTable(metrics) {
+function generateMetricsTable(metrics, benchmarkMetrics = null, benchmarkTitle = 'Benchmark') {
+  // Create headers
+  const hasThreeColumns = benchmarkMetrics !== null;
+  const headers = hasThreeColumns 
+    ? `<tr><th>Metric</th><th>${benchmarkTitle}</th><th>Strategy</th></tr>`
+    : `<tr><th>Metric</th><th>Strategy</th></tr>`;
+  
   let tableRows = '';
   for (const [key, value] of Object.entries(metrics)) {
-    tableRows += `<tr><td>${key}</td><td>${value}</td></tr>\n`;
+    if (hasThreeColumns) {
+      const benchmarkValue = benchmarkMetrics[key] || '-';
+      tableRows += `<tr><td>${key}</td><td>${benchmarkValue}</td><td>${value}</td></tr>\n`;
+    } else {
+      tableRows += `<tr><td>${key}</td><td>${value}</td></tr>\n`;
+    }
   }
   
   return `<table>
+    <thead>
+      ${headers}
+    </thead>
     <tbody>
       ${tableRows}
     </tbody>

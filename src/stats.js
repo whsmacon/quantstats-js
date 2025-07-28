@@ -516,7 +516,7 @@ export function valueAtRisk(returns, sigma = 1, confidence = 0.95, nans = false)
 
 /**
  * Calculate Conditional Value at Risk (CVaR/Expected Shortfall)
- * Exactly matches Python implementation using VaR-based method
+ * Exactly matches Python implementation using empirical method
  * @param {Array} returns - Returns array
  * @param {number} sigma - Sigma multiplier (default 1)
  * @param {number} confidence - Confidence level (default 0.95)
@@ -530,10 +530,10 @@ export function cvar(returns, sigma = 1, confidence = 0.95, nans = false) {
     return 0;
   }
   
-  // First calculate VaR using variance-covariance method
+  // First calculate VaR using variance-covariance method (Python implementation)
   const var95 = valueAtRisk(returns, sigma, confidence, nans);
   
-  // Then take mean of all returns below VaR threshold
+  // Python: returns[returns < var].values.mean()
   const belowVar = cleanReturns.filter(ret => ret < var95);
   
   if (belowVar.length === 0) {
@@ -542,9 +542,8 @@ export function cvar(returns, sigma = 1, confidence = 0.95, nans = false) {
   
   const cVarResult = belowVar.reduce((sum, ret) => sum + ret, 0) / belowVar.length;
   
-  // Return cVaR if valid and not based on single outlier, otherwise return VaR
-  // Python appears to return VaR when there's insufficient tail data
-  return (!isNaN(cVarResult) && belowVar.length > 1) ? cVarResult : var95;
+  // Python: return c_var if ~np.isnan(c_var) else var
+  return !isNaN(cVarResult) ? cVarResult : var95;
 }
 
 /**

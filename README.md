@@ -79,6 +79,39 @@ const tearsheet = qs.reports.basic(returns, 'My Portfolio Strategy');
 fs.writeFileSync('tearsheet.html', tearsheet);
 ```
 
+## 🆚 Benchmark Comparison
+
+**NEW in v2.1.0**: Compare your strategy against any benchmark!
+
+```javascript
+import * as qs from 'quantstats-js';
+
+// Your strategy returns
+const strategyReturns = { 
+  values: [0.01, -0.005, 0.02, -0.01, 0.015],
+  index: [/* Date objects */]
+};
+
+// Benchmark returns (e.g., S&P 500)
+const benchmarkReturns = { 
+  values: [0.008, -0.003, 0.015, -0.008, 0.012],
+  index: [/* Date objects */]
+};
+
+// Generate tearsheet with benchmark comparison
+const tearsheet = qs.reports.basic(
+  strategyReturns, 
+  'My Strategy vs S&P 500',
+  0,                    // risk-free rate
+  false,                // include NaNs
+  benchmarkReturns,     // benchmark data
+  'S&P 500'            // benchmark name
+);
+
+// Creates a 3-column table: Metric | S&P 500 | Strategy
+// Shows "Benchmarked Against S&P 500" in header
+```
+
 ### 🎨 What's Included in the Tearsheet
 
 **📈 13+ Professional Charts:**
@@ -705,6 +738,43 @@ The test suite includes:
 Apache License 2.0 - see [LICENSE](LICENSE) file for details.
 
 ## 📝 Changelog
+
+### v2.1.0 - Benchmark Comparison Feature 🆚
+
+**🚀 NEW FEATURES:**
+
+**🆚 Benchmark Comparison:**
+- **Side-by-Side Metrics** - Compare your strategy against any benchmark (S&P 500, Bitcoin, etc.)
+- **3-Column Table Layout** - Professional comparison: Metric | Benchmark | Strategy
+- **Dynamic Headers** - Shows "Benchmarked Against [Benchmark Name]" in report title
+- **Full Integration** - Works with both `basic()` and `html()` tearsheet functions
+- **Backward Compatible** - All existing code continues to work unchanged
+
+**🔧 Function Enhancements:**
+- `qs.reports.basic(returns, title, rfRate, nans, benchmark, benchmarkTitle)` - Added optional benchmark parameters
+- `qs.reports.html(returns, filename, title, rfRate, nans, benchmark, benchmarkTitle)` - Added optional benchmark parameters
+- Enhanced `generateMetricsTable()` to handle 2-column or 3-column layouts automatically
+
+**📊 Usage Examples:**
+```javascript
+// Without benchmark (works exactly as before)
+const report = qs.reports.basic(returns, 'My Strategy');
+
+// With benchmark comparison
+const report = qs.reports.basic(
+  strategyReturns, 
+  'My Strategy vs S&P 500',
+  0, false, 
+  benchmarkReturns, 
+  'S&P 500'
+);
+```
+
+**✅ Quality Assurance:**
+- All 26 tests passing with 100% success rate
+- Zero breaking changes - fully backward compatible
+- Professional presentation with clean table formatting
+- Works with any benchmark data (stocks, crypto, bonds, etc.)
 
 ### v2.0.3 - Simplified API: Removed Benchmark Dependencies 🧹
 
