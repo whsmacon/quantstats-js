@@ -1,6 +1,6 @@
 {
   "name": "quantstats-js",
-  "version": "2.4.0",
+  "version": "2.4.1",
     "description": "Comprehensive portfolio analytics and professional tearsheet generation library for JavaScript/Node.js - create beautiful HTML reports with 13+ financial charts and 40+ metrics",
   "main": "index.js",
   "type": "module",

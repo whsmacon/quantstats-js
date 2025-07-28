@@ -2254,6 +2254,12 @@ function generateMetricsTable(metrics, benchmarkMetrics = null, benchmarkTitle =
   let tableRows = '';
   for (const [key, value] of Object.entries(metrics)) {
     if (hasThreeColumns) {
+      // Special handling for Start Period and End Period - they should span all columns
+      if (key === 'Start Period' || key === 'End Period') {
+        tableRows += `<tr><td>${key}</td><td colspan="3" style="text-align: center;">${value}</td></tr>\n`;
+        continue;
+      }
+      
       const benchmarkValue = benchmarkMetrics[key] || '-';
       
       // Add green highlighting for better performer
