@@ -739,6 +739,31 @@ Apache License 2.0 - see [LICENSE](LICENSE) file for details.
 
 ## 📝 Changelog
 
+### v2.1.2 - Enhanced Tearsheet Layout & Design 🎨
+
+**🎨 LAYOUT IMPROVEMENTS:**
+
+**📐 Wider Tearsheet Design:**
+- **80% Screen Width** - Increased container width from fixed 1200px to 80% of screen for better use of space
+- **Better Grid Balance** - Updated layout from 2fr 1fr to 3fr 2fr (charts 60%, stats 40%) for better benchmark comparison viewing
+- **Responsive Design** - Maintains professional look across different screen sizes
+
+**📊 Enhanced EOY Returns Table:**
+- **Benchmark Integration** - End of Year Returns table now includes benchmark comparison when provided
+- **3-Column Layout** - Shows Year | Benchmark | Strategy for easy annual performance comparison
+- **Automatic Detection** - Only shows benchmark column when benchmark data is provided
+
+**🧹 Design Polish:**
+- **Cleaner Headers** - Removed redundant "Benchmarked Against" subtitle since titles already include "vs Benchmark"
+- **Professional Layout** - More space for metrics tables with multiple columns
+- **Better Proportions** - Improved balance between charts and statistical analysis
+
+**✅ Quality Assurance:**
+- All 26 tests passing with 100% success rate
+- Backward compatible - no API changes
+- Professional appearance maintained
+- Responsive design preserved
+
 ### v2.1.1 - Date Range Normalization for Benchmarks 📅
 
 **🔧 CRITICAL FIX:**

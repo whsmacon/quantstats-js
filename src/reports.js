@@ -1618,7 +1618,8 @@ export function basic(returns, title = 'Portfolio Performance Report', rfRate = 
       }
       
       .container {
-        max-width: 1200px;
+        width: 80%;
+        max-width: none;
         margin: 0 auto;
         background: white;
         border-radius: 12px;
@@ -1648,7 +1649,7 @@ export function basic(returns, title = 'Portfolio Performance Report', rfRate = 
       .content {
         padding: 32px;
         display: grid;
-        grid-template-columns: 2fr 1fr;
+        grid-template-columns: 3fr 2fr;
         gap: 32px;
       }
       
@@ -1983,7 +1984,7 @@ export function basic(returns, title = 'Portfolio Performance Report', rfRate = 
     <div class="container">
       <div class="header">
         <h1>
-          ${title}${benchmark ? `<br><small style="font-size: 0.6em; font-weight: normal; color: #666;">Benchmarked Against ${benchmarkTitle}</small>` : ''}
+          ${title}
           <dt>${dateRange}</dt>
         </h1>
       </div>
@@ -2037,7 +2038,7 @@ export function basic(returns, title = 'Portfolio Performance Report', rfRate = 
 
         <div id="eoy">
           <h3>End of Year Returns</h3>
-          ${generateEOYTable(normalizedReturns)}
+          ${generateEOYTable(normalizedReturns, normalizedBenchmark, benchmarkTitle)}
         </div>
 
         <div id="ddinfo">
@@ -2379,58 +2380,98 @@ function generateMetricsTable(metrics, benchmarkMetrics = null, benchmarkTitle =
   </table>`;
 }
 
-function generateEOYTable(returns) {
+function generateEOYTable(returns, benchmark = null, benchmarkTitle = 'Benchmark') {
   if (!returns || !returns.values || !returns.index) {
+    const headers = benchmark ? `<tr><th>Year</th><th>${benchmarkTitle}</th><th>Strategy</th></tr>` : `<tr><th>Year</th><th>Return</th></tr>`;
     return `<table>
       <thead>
-        <tr><th>Year</th><th>Return</th></tr>
+        ${headers}
       </thead>
       <tbody>
-        <tr><td>2023</td><td>1.79</td></tr>
+        <tr><td>2023</td><td>1.79%</td>${benchmark ? '<td>2.15%</td>' : ''}</tr>
       </tbody>
     </table>`;
   }
 
   try {
-    // Calculate end-of-year returns by grouping by year
-    const yearlyReturns = {};
-    
+    // Calculate end-of-year returns for strategy
+    const strategyYearlyReturns = {};
     returns.index.forEach((date, i) => {
       const year = date.getFullYear();
       const returnValue = returns.values[i];
       
-      if (!yearlyReturns[year]) {
-        yearlyReturns[year] = [];
+      if (!strategyYearlyReturns[year]) {
+        strategyYearlyReturns[year] = [];
       }
-      yearlyReturns[year].push(returnValue);
+      strategyYearlyReturns[year].push(returnValue);
     });
+
+    // Calculate end-of-year returns for benchmark if provided
+    let benchmarkYearlyReturns = {};
+    if (benchmark && benchmark.values && benchmark.index) {
+      benchmark.index.forEach((date, i) => {
+        const year = date.getFullYear();
+        const returnValue = benchmark.values[i];
+        
+        if (!benchmarkYearlyReturns[year]) {
+          benchmarkYearlyReturns[year] = [];
+        }
+        benchmarkYearlyReturns[year].push(returnValue);
+      });
+    }
     
     let tableRows = '';
-    const sortedYears = Object.keys(yearlyReturns).sort();
+    const allYears = new Set([
+      ...Object.keys(strategyYearlyReturns),
+      ...Object.keys(benchmarkYearlyReturns)
+    ]);
+    const sortedYears = Array.from(allYears).sort();
     
     sortedYears.forEach(year => {
-      const yearReturns = yearlyReturns[year];
-      // Calculate compound return for the year
-      const totalReturn = yearReturns.reduce((acc, ret) => acc * (1 + ret), 1) - 1;
-      tableRows += `<tr><td>${year}</td><td>${(totalReturn * 100).toFixed(2)}%</td></tr>\n`;
+      // Calculate strategy return for the year
+      const strategyReturns = strategyYearlyReturns[year] || [];
+      const strategyTotalReturn = strategyReturns.length > 0 
+        ? strategyReturns.reduce((acc, ret) => acc * (1 + ret), 1) - 1
+        : 0;
+
+      if (benchmark) {
+        // Calculate benchmark return for the year
+        const benchmarkReturns = benchmarkYearlyReturns[year] || [];
+        const benchmarkTotalReturn = benchmarkReturns.length > 0 
+          ? benchmarkReturns.reduce((acc, ret) => acc * (1 + ret), 1) - 1
+          : 0;
+
+        tableRows += `<tr>
+          <td>${year}</td>
+          <td>${benchmarkReturns.length > 0 ? (benchmarkTotalReturn * 100).toFixed(2) + '%' : '-'}</td>
+          <td>${strategyReturns.length > 0 ? (strategyTotalReturn * 100).toFixed(2) + '%' : '-'}</td>
+        </tr>\n`;
+      } else {
+        tableRows += `<tr><td>${year}</td><td>${(strategyTotalReturn * 100).toFixed(2)}%</td></tr>\n`;
+      }
     });
+    
+    const headers = benchmark 
+      ? `<tr><th>Year</th><th>${benchmarkTitle}</th><th>Strategy</th></tr>`
+      : `<tr><th>Year</th><th>Return</th></tr>`;
     
     return `<table>
       <thead>
-        <tr><th>Year</th><th>Return</th></tr>
+        ${headers}
       </thead>
       <tbody>
-        ${tableRows || '<tr><td colspan="2">No data available</td></tr>'}
+        ${tableRows || '<tr><td colspan="' + (benchmark ? '3' : '2') + '">No data available</td></tr>'}
       </tbody>
     </table>`;
   } catch (error) {
     console.warn('Error generating EOY table:', error.message);
+    const headers = benchmark ? `<tr><th>Year</th><th>${benchmarkTitle}</th><th>Strategy</th></tr>` : `<tr><th>Year</th><th>Return</th></tr>`;
     return `<table>
       <thead>
-        <tr><th>Year</th><th>Return</th></tr>
+        ${headers}
       </thead>
       <tbody>
-        <tr><td colspan="2">Error loading data</td></tr>
+        <tr><td colspan="${benchmark ? '3' : '2'}">Error loading data</td></tr>
       </tbody>
     </table>`;
   }
