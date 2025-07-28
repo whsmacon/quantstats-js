@@ -221,7 +221,7 @@ function generateCumulativeReturnsChart(returns, dates, title = 'Cumulative Retu
     }).join('')}
     
     <!-- Chart title -->
-    <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" 
+    <text x="${width/2}" y="25" text-anchor="middle" font-size="16" font-weight="600" 
           fill="#333" font-family="Arial, sans-serif">${title}</text>
     
     <!-- Time labels -->
@@ -245,9 +245,9 @@ function generateCumulativeReturnsChart(returns, dates, title = 'Cumulative Retu
  * Generate EOY Returns bar chart
  */
 function generateEOYReturnsChart(returns, dates, title = 'EOY Returns') {
-  const width = 720; // Wide enough for long time series
-  const height = 380; // Reduced height since no angled labels
-  const margin = { top: 50, right: 40, bottom: 50, left: 70 }; // Smaller bottom margin
+  const width = 800; // Standardized width for consistency
+  const height = 400; // Standardized height for consistency
+  const margin = { top: 50, right: 40, bottom: 50, left: 70 };
   const chartWidth = width - margin.left - margin.right;
   const chartHeight = height - margin.top - margin.bottom;
   
@@ -397,8 +397,8 @@ function generateEOYReturnsChart(returns, dates, title = 'EOY Returns') {
  * Generate Monthly Distribution histogram chart
  */
 function generateMonthlyDistChart(returns, dates, title = 'Monthly Distribution') {
-  const width = 576;
-  const height = 360;
+  const width = 800;
+  const height = 400;
   const margin = { top: 40, right: 40, bottom: 80, left: 60 };
   const chartWidth = width - margin.left - margin.right;
   const chartHeight = height - margin.top - margin.bottom;
@@ -411,9 +411,9 @@ function generateMonthlyDistChart(returns, dates, title = 'Monthly Distribution'
   const monthlyReturns = stats.monthlyReturns(returnsData, false, datesData, true);
   
   if (!monthlyReturns || monthlyReturns.length === 0) {
-    return `<svg width="576" height="360" viewBox="0 0 576 360">
-      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
-      <text x="288" y="180" text-anchor="middle" fill="#6c757d">No monthly data available</text>
+    return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">
+      <rect width="${width}" height="${height}" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="${width/2}" y="${height/2}" text-anchor="middle" fill="#6c757d">No monthly data available</text>
     </svg>`;
   }
   
@@ -489,7 +489,8 @@ function generateMonthlyDistChart(returns, dates, title = 'Monthly Distribution'
     ${bars}
     
     <!-- Title -->
-    <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    <text x="${width/2}" y="25" text-anchor="middle" font-size="16" font-weight="600" 
+          fill="#333" font-family="Arial, sans-serif">${title}</text>
     
     <!-- Y-axis labels -->
     ${yAxisLabels}
@@ -509,8 +510,8 @@ function generateMonthlyDistChart(returns, dates, title = 'Monthly Distribution'
  * Generate Daily Returns scatter chart
  */
 function generateDailyReturnsChart(returns, dates, title = 'Daily Returns') {
-  const width = 576;
-  const height = 360;
+  const width = 800;
+  const height = 400;
   const margin = { top: 40, right: 40, bottom: 80, left: 60 };
   const chartWidth = width - margin.left - margin.right;
   const chartHeight = height - margin.top - margin.bottom;
@@ -519,9 +520,9 @@ function generateDailyReturnsChart(returns, dates, title = 'Daily Returns') {
   const returnsData = returns.values ? returns.values : (Array.isArray(returns) ? returns : []);
   
   if (!returnsData || returnsData.length === 0) {
-    return `<svg width="576" height="360" viewBox="0 0 576 360">
-      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
-      <text x="288" y="180" text-anchor="middle" fill="#6c757d">No daily data available</text>
+    return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">
+      <rect width="${width}" height="${height}" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="${width/2}" y="${height/2}" text-anchor="middle" fill="#6c757d">No daily data available</text>
     </svg>`;
   }
   
@@ -579,7 +580,8 @@ function generateDailyReturnsChart(returns, dates, title = 'Daily Returns') {
     ${points}
     
     <!-- Title -->
-    <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    <text x="${width/2}" y="25" text-anchor="middle" font-size="16" font-weight="600" 
+          fill="#333" font-family="Arial, sans-serif">${title}</text>
     
     <!-- Time labels -->
     ${timeLabels.join('')}
@@ -594,8 +596,8 @@ function generateDailyReturnsChart(returns, dates, title = 'Daily Returns') {
  * Generate Rolling Volatility chart
  */
 function generateRollingVolatilityChart(returns, dates, title = 'Rolling Volatility (30 day)') {
-  const width = 576;
-  const height = 360;
+  const width = 800;
+  const height = 400;
   const margin = { top: 40, right: 40, bottom: 80, left: 60 };
   const chartWidth = width - margin.left - margin.right;
   const chartHeight = height - margin.top - margin.bottom;
@@ -604,9 +606,9 @@ function generateRollingVolatilityChart(returns, dates, title = 'Rolling Volatil
   const returnsData = returns.values ? returns.values : (Array.isArray(returns) ? returns : []);
   
   if (!returnsData || returnsData.length < 30) {
-    return `<svg width="576" height="360" viewBox="0 0 576 360">
-      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
-      <text x="288" y="180" text-anchor="middle" fill="#6c757d">Insufficient data for rolling volatility</text>
+    return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">
+      <rect width="${width}" height="${height}" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="${width/2}" y="${height/2}" text-anchor="middle" fill="#6c757d">Insufficient data for rolling volatility</text>
     </svg>`;
   }
   
@@ -665,7 +667,7 @@ function generateRollingVolatilityChart(returns, dates, title = 'Rolling Volatil
     <path d="${pathData}" fill="none" stroke="#ff7f0e" stroke-width="2"/>
     
     <!-- Title -->
-    <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    <text x="${width/2}" y="25" text-anchor="middle" font-size="16" font-weight="600" fill="#333">${title}</text>
     
     <!-- Time labels -->
     ${timeLabels.join('')}
@@ -680,8 +682,8 @@ function generateRollingVolatilityChart(returns, dates, title = 'Rolling Volatil
  * Generate Rolling Sharpe chart
  */
 function generateRollingSharpeChart(returns, dates, title = 'Rolling Sharpe (30 day)', rfRate = 0) {
-  const width = 576;
-  const height = 360;
+  const width = 800;
+  const height = 400;
   const margin = { top: 40, right: 40, bottom: 80, left: 60 };
   const chartWidth = width - margin.left - margin.right;
   const chartHeight = height - margin.top - margin.bottom;
@@ -690,9 +692,9 @@ function generateRollingSharpeChart(returns, dates, title = 'Rolling Sharpe (30 
   const returnsData = returns.values ? returns.values : (Array.isArray(returns) ? returns : []);
   
   if (!returnsData || returnsData.length < 30) {
-    return `<svg width="576" height="360" viewBox="0 0 576 360">
-      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
-      <text x="288" y="180" text-anchor="middle" fill="#6c757d">Insufficient data for rolling Sharpe</text>
+    return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">
+      <rect width="${width}" height="${height}" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="${width/2}" y="${height/2}" text-anchor="middle" fill="#6c757d">Insufficient data for rolling Sharpe</text>
     </svg>`;
   }
   
@@ -758,7 +760,7 @@ function generateRollingSharpeChart(returns, dates, title = 'Rolling Sharpe (30 
     <path d="${pathData}" fill="none" stroke="#2ca02c" stroke-width="2"/>
     
     <!-- Title -->
-    <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    <text x="${width/2}" y="25" text-anchor="middle" font-size="16" font-weight="600" fill="#333">${title}</text>
     
     <!-- Time labels -->
     ${timeLabels.join('')}
@@ -773,8 +775,8 @@ function generateRollingSharpeChart(returns, dates, title = 'Rolling Sharpe (30 
  * Generate Rolling Sortino chart
  */
 function generateRollingSortinoChart(returns, dates, title = 'Rolling Sortino (30 day)', rfRate = 0) {
-  const width = 576;
-  const height = 360;
+  const width = 800;
+  const height = 400;
   const margin = { top: 40, right: 40, bottom: 80, left: 60 };
   const chartWidth = width - margin.left - margin.right;
   const chartHeight = height - margin.top - margin.bottom;
@@ -783,9 +785,9 @@ function generateRollingSortinoChart(returns, dates, title = 'Rolling Sortino (3
   const returnsData = returns.values ? returns.values : (Array.isArray(returns) ? returns : []);
   
   if (!returnsData || returnsData.length < 30) {
-    return `<svg width="576" height="360" viewBox="0 0 576 360">
-      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
-      <text x="288" y="180" text-anchor="middle" fill="#6c757d">Insufficient data for rolling Sortino</text>
+    return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">
+      <rect width="${width}" height="${height}" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="${width/2}" y="${height/2}" text-anchor="middle" fill="#6c757d">Insufficient data for rolling Sortino</text>
     </svg>`;
   }
   
@@ -860,7 +862,7 @@ function generateRollingSortinoChart(returns, dates, title = 'Rolling Sortino (3
     <path d="${pathData}" fill="none" stroke="#9467bd" stroke-width="2"/>
     
     <!-- Title -->
-    <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    <text x="${width/2}" y="25" text-anchor="middle" font-size="16" font-weight="600" fill="#333">${title}</text>
     
     <!-- Time labels -->
     ${timeLabels.join('')}
@@ -875,8 +877,8 @@ function generateRollingSortinoChart(returns, dates, title = 'Rolling Sortino (3
  * Generate Drawdown Periods chart
  */
 function generateDrawdownPeriodsChart(returns, dates, title = 'Top 5 Drawdown Periods') {
-  const width = 576;
-  const height = 360;
+  const width = 800;
+  const height = 400;
   const margin = { top: 40, right: 40, bottom: 80, left: 60 };
   const chartWidth = width - margin.left - margin.right;
   const chartHeight = height - margin.top - margin.bottom;
@@ -949,9 +951,9 @@ function generateDrawdownPeriodsChart(returns, dates, title = 'Top 5 Drawdown Pe
   }
   
   if (drawdownPeriods.length === 0) {
-    return `<svg width="576" height="360" viewBox="0 0 576 360">
-      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
-      <text x="288" y="180" text-anchor="middle" fill="#6c757d">No significant drawdown periods found</text>
+    return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">
+      <rect width="${width}" height="${height}" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="${width/2}" y="${height/2}" text-anchor="middle" fill="#6c757d">No significant drawdown periods found</text>
     </svg>`;
   }
   
@@ -986,7 +988,7 @@ function generateDrawdownPeriodsChart(returns, dates, title = 'Top 5 Drawdown Pe
     ${bars}
     
     <!-- Title -->
-    <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    <text x="${width/2}" y="25" text-anchor="middle" font-size="16" font-weight="600" fill="#333">${title}</text>
     
     <!-- Labels -->
     <text x="${width/2}" y="${height - 5}" text-anchor="middle" font-size="10" fill="#666">Duration (days)</text>
@@ -1005,8 +1007,8 @@ function generateLogReturnsChart(returns, dates, title = 'Log Returns') {
  * Generate Vol/Returns chart
  */
 function generateVolReturnsChart(returns, dates, title = 'Volatility vs Returns') {
-  const width = 576;
-  const height = 360;
+  const width = 800;
+  const height = 400;
   const margin = { top: 40, right: 40, bottom: 80, left: 60 };
   const chartWidth = width - margin.left - margin.right;
   const chartHeight = height - margin.top - margin.bottom;
@@ -1015,9 +1017,9 @@ function generateVolReturnsChart(returns, dates, title = 'Volatility vs Returns'
   const returnsData = returns.values ? returns.values : (Array.isArray(returns) ? returns : []);
   
   if (!returnsData || returnsData.length < 252) {
-    return `<svg width="576" height="360" viewBox="0 0 576 360">
-      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
-      <text x="288" y="180" text-anchor="middle" fill="#6c757d">Insufficient data for vol/returns analysis</text>
+    return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">
+      <rect width="${width}" height="${height}" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="${width/2}" y="${height/2}" text-anchor="middle" fill="#6c757d">Insufficient data for vol/returns analysis</text>
     </svg>`;
   }
   
@@ -1055,7 +1057,7 @@ function generateVolReturnsChart(returns, dates, title = 'Volatility vs Returns'
     ${points}
     
     <!-- Title -->
-    <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    <text x="${width/2}" y="25" text-anchor="middle" font-size="16" font-weight="600" fill="#333">${title}</text>
     
     <!-- Axis labels -->
     <text x="${width/2}" y="${height - 5}" text-anchor="middle" font-size="11" fill="#666">Volatility</text>
@@ -1312,8 +1314,8 @@ function generateMonthlyHeatmapChart(returns, dates, title = 'Monthly Returns He
  * Generate Returns Distribution chart
  */
 function generateReturnsDistributionChart(returns, dates, title = 'Returns Distribution') {
-  const width = 576;
-  const height = 360;
+  const width = 800;
+  const height = 400;
   const margin = { top: 40, right: 40, bottom: 80, left: 60 };
   const chartWidth = width - margin.left - margin.right;
   const chartHeight = height - margin.top - margin.bottom;
@@ -1322,9 +1324,9 @@ function generateReturnsDistributionChart(returns, dates, title = 'Returns Distr
   const returnsData = returns.values ? returns.values : (Array.isArray(returns) ? returns : []);
   
   if (!returnsData || returnsData.length === 0) {
-    return `<svg width="576" height="360" viewBox="0 0 576 360">
-      <rect width="576" height="360" fill="#f8f9fa" stroke="#dee2e6"/>
-      <text x="288" y="180" text-anchor="middle" fill="#6c757d">No data for returns distribution</text>
+    return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">
+      <rect width="${width}" height="${height}" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="${width/2}" y="${height/2}" text-anchor="middle" fill="#6c757d">No data for returns distribution</text>
     </svg>`;
   }
   
@@ -1392,7 +1394,7 @@ function generateReturnsDistributionChart(returns, dates, title = 'Returns Distr
     })()}
     
     <!-- Title -->
-    <text x="${width/2}" y="25" text-anchor="middle" font-size="14" font-weight="600" fill="#333">${title}</text>
+    <text x="${width/2}" y="25" text-anchor="middle" font-size="16" font-weight="600" fill="#333">${title}</text>
     
     <!-- X-axis labels -->
     <text x="${margin.left}" y="${height - 20}" font-size="10" fill="#666">${(minValue * 100).toFixed(1)}%</text>
