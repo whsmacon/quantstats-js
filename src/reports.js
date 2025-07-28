@@ -71,51 +71,21 @@ export function metrics(returns, rfRate = 0, nans = false) {
 /**
  * Generate SVG chart for equity curve
  */
-function generateEquityCurveSVG(data) {
-  if (!data || !data.data) return '<div>No equity curve data available</div>';
-  
-  const width = 576;
-  const height = 360;
-  const margin = { top: 40, right: 40, bottom: 80, left: 60 };
-  const chartWidth = width - margin.left - margin.right;
-  const chartHeight = height - margin.top - margin.bottom;
-  
-  const values = data.data;
-  const minValue = Math.min(...values);
-  const maxValue = Math.max(...values);
-  const valueRange = maxValue - minValue;
-  
-  // Generate path data
-  const pathData = values.map((value, index) => {
-    const x = margin.left + (index / (values.length - 1)) * chartWidth;
-    const y = margin.top + ((maxValue - value) / valueRange) * chartHeight;
-    return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
-  }).join(' ');
-  
-  return `<div>
-<svg xmlns="http://www.w3.org/2000/svg" width="${width}pt" height="${height}pt" viewBox="0 0 ${width} ${height}">
-  <defs>
-    <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
-  </defs>
-  <g>
-    <rect x="0" y="0" width="${width}" height="${height}" style="fill: #ffffff"/>
-    <rect x="${margin.left}" y="${margin.top}" width="${chartWidth}" height="${chartHeight}" style="fill: #ffffff"/>
-    <path d="${pathData}" style="fill: none; stroke: #1f77b4; stroke-width: 1.5"/>
-    <text x="${width/2}" y="25" style="font: 14px Arial; text-anchor: middle; fill: #000000">Cumulative Returns</text>
-    <text x="${margin.left}" y="${height - 20}" style="font: 12px Arial; fill: #666666">Start</text>
-    <text x="${width - margin.right}" y="${height - 20}" style="font: 12px Arial; text-anchor: end; fill: #666666">End</text>
-    <text x="20" y="${margin.top + 10}" style="font: 12px Arial; fill: #666666">${maxValue.toFixed(0)}</text>
-    <text x="20" y="${height - margin.bottom + 10}" style="font: 12px Arial; fill: #666666">${minValue.toFixed(0)}</text>
-  </g>
-</svg>
-</div>`;
-}
-
 /**
  * Generate SVG chart for drawdown
  */
-function generateDrawdownSVG(data) {
-  if (!data || !data.data) return '<div>No drawdown data available</div>';
+function generateDrawdownSVG(data, dates, title = 'Underwater Plot') {
+  // Handle different data formats - if it's already an array, use it directly
+  let values;
+  if (Array.isArray(data)) {
+    values = data;
+  } else if (data && data.data) {
+    values = data.data;
+  } else {
+    return '<div>No drawdown data available</div>';
+  }
+  
+  if (!values || values.length === 0) return '<div>No drawdown data available</div>';
   
   const width = 576;
   const height = 360;
@@ -123,7 +93,6 @@ function generateDrawdownSVG(data) {
   const chartWidth = width - margin.left - margin.right;
   const chartHeight = height - margin.top - margin.bottom;
   
-  const values = data.data;
   const minValue = Math.min(...values, 0);
   const maxValue = 0;
   const valueRange = maxValue - minValue;
@@ -139,7 +108,7 @@ function generateDrawdownSVG(data) {
   const areaPath = pathData + ` L ${margin.left + chartWidth} ${baselineY} L ${margin.left} ${baselineY} Z`;
   
   return `<div>
-<svg xmlns="http://www.w3.org/2000/svg" width="${width}pt" height="${height}pt" viewBox="0 0 ${width} ${height}">
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="400" viewBox="0 0 ${width} ${height}" style="max-width: 100%; height: auto;">
   <defs>
     <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
   </defs>
@@ -147,7 +116,7 @@ function generateDrawdownSVG(data) {
     <rect x="0" y="0" width="${width}" height="${height}" style="fill: #ffffff"/>
     <rect x="${margin.left}" y="${margin.top}" width="${chartWidth}" height="${chartHeight}" style="fill: #ffffff"/>
     <path d="${areaPath}" style="fill: #ff7f0e; fill-opacity: 0.6; stroke: #ff7f0e; stroke-width: 1"/>
-    <text x="${width/2}" y="25" style="font: 14px Arial; text-anchor: middle; fill: #000000">Underwater Plot</text>
+    <text x="${width/2}" y="25" style="font: 14px Arial; text-anchor: middle; fill: #000000">${title}</text>
     <text x="${margin.left}" y="${height - 20}" style="font: 12px Arial; fill: #666666">Start</text>
     <text x="${width - margin.right}" y="${height - 20}" style="font: 12px Arial; text-anchor: end; fill: #666666">End</text>
     <text x="20" y="${margin.top + 10}" style="font: 12px Arial; fill: #666666">0%</text>
@@ -559,7 +528,7 @@ function generateMonthlyDistChart(returns, dates, title = 'Monthly Distribution'
     `<text x="${tick.x}" y="${height - 20}" text-anchor="middle" font-size="11" fill="#666">${(tick.value * 100).toFixed(1)}%</text>`
   ).join('');
   
-  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">
     <!-- Background -->
     <rect width="${width}" height="${height}" fill="white"/>
     
@@ -649,7 +618,7 @@ function generateDailyReturnsChart(returns, dates, title = 'Daily Returns') {
     });
   }
   
-  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">
     <!-- Background -->
     <rect width="${width}" height="${height}" fill="white"/>
     
@@ -739,7 +708,7 @@ function generateRollingVolatilityChart(returns, dates, title = 'Rolling Volatil
     });
   }
   
-  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">
     <!-- Background -->
     <rect width="${width}" height="${height}" fill="white"/>
     
@@ -828,7 +797,7 @@ function generateRollingSharpeChart(returns, dates, title = 'Rolling Sharpe (30 
   // Zero line
   const zeroY = margin.top + ((maxValue - 0) / valueRange) * chartHeight;
   
-  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">
     <!-- Background -->
     <rect width="${width}" height="${height}" fill="white"/>
     
@@ -930,7 +899,7 @@ function generateRollingSortinoChart(returns, dates, title = 'Rolling Sortino (3
   // Zero line
   const zeroY = margin.top + ((maxValue - 0) / valueRange) * chartHeight;
   
-  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">
     <!-- Background -->
     <rect width="${width}" height="${height}" fill="white"/>
     
@@ -1060,7 +1029,7 @@ function generateDrawdownPeriodsChart(returns, dates, title = 'Top 5 Drawdown Pe
             <text x="${x + barWidth/2}" y="${margin.top + chartHeight + 20}" text-anchor="middle" font-size="9" fill="#666">${dd.days}d</text>`;
   }).join('');
   
-  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">
     <!-- Background -->
     <rect width="${width}" height="${height}" fill="white"/>
     
@@ -1129,7 +1098,7 @@ function generateVolReturnsChart(returns, dates, title = 'Volatility vs Returns'
     return `<circle cx="${x}" cy="${y}" r="3" fill="#ff7f0e" opacity="0.7"/>`;
   }).join('');
   
-  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">
     <!-- Background -->
     <rect width="${width}" height="${height}" fill="white"/>
     
@@ -1456,7 +1425,7 @@ function generateReturnsDistributionChart(returns, dates, title = 'Returns Distr
     return `<rect x="${x}" y="${y}" width="${barWidth - 1}" height="${barHeight}" fill="#1f77b4" opacity="0.7"/>`;
   }).join('');
   
-  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">
     <!-- Background -->
     <rect width="${width}" height="${height}" fill="white"/>
     
@@ -2364,7 +2333,49 @@ function generateMetricsTable(metrics, benchmarkMetrics = null, benchmarkTitle =
   for (const [key, value] of Object.entries(metrics)) {
     if (hasThreeColumns) {
       const benchmarkValue = benchmarkMetrics[key] || '-';
-      tableRows += `<tr><td>${key}</td><td>${benchmarkValue}</td><td>${value}</td></tr>\n`;
+      
+      // Add green highlighting for better performer
+      let benchmarkStyle = '';
+      let strategyStyle = '';
+      
+      // Only compare if both values are numeric (not '-' or text)
+      if (benchmarkValue !== '-' && value !== '-') {
+        // Parse numeric values, handling percentage signs
+        const parseValue = (val) => {
+          if (typeof val === 'string') {
+            return parseFloat(val.replace('%', '').replace(',', ''));
+          }
+          return parseFloat(val);
+        };
+        
+        const benchmarkNum = parseValue(benchmarkValue);
+        const strategyNum = parseValue(value);
+        
+        if (!isNaN(benchmarkNum) && !isNaN(strategyNum)) {
+          // For metrics like Max Drawdown, lower is better (contains "Drawdown" or starts with negative)
+          const isLowerBetter = key.toLowerCase().includes('drawdown') || 
+                               key.toLowerCase().includes('risk') ||
+                               key.toLowerCase().includes('var') ||
+                               key.toLowerCase().includes('volatility');
+          
+          if (isLowerBetter) {
+            if (benchmarkNum < strategyNum) {
+              benchmarkStyle = 'color: #4caf50; font-weight: bold;';
+            } else if (strategyNum < benchmarkNum) {
+              strategyStyle = 'color: #4caf50; font-weight: bold;';
+            }
+          } else {
+            // Higher is better for most metrics
+            if (benchmarkNum > strategyNum) {
+              benchmarkStyle = 'color: #4caf50; font-weight: bold;';
+            } else if (strategyNum > benchmarkNum) {
+              strategyStyle = 'color: #4caf50; font-weight: bold;';
+            }
+          }
+        }
+      }
+      
+      tableRows += `<tr><td>${key}</td><td style="${benchmarkStyle}">${benchmarkValue}</td><td style="${strategyStyle}">${value}</td></tr>\n`;
     } else {
       tableRows += `<tr><td>${key}</td><td>${value}</td></tr>\n`;
     }
@@ -2435,16 +2446,20 @@ function generateEOYTable(returns, benchmark = null, benchmarkTitle = 'Benchmark
         : 0;
 
       if (benchmark) {
-        // Calculate benchmark return for the year
+        // Calculate benchmark return for the year (same calculation as strategy)
         const benchmarkReturns = benchmarkYearlyReturns[year] || [];
         const benchmarkTotalReturn = benchmarkReturns.length > 0 
           ? benchmarkReturns.reduce((acc, ret) => acc * (1 + ret), 1) - 1
           : 0;
 
+        // Format both the same way (same as strategy)
+        const benchmarkFormatted = benchmarkReturns.length > 0 ? (benchmarkTotalReturn * 100).toFixed(2) + '%' : '-';
+        const strategyFormatted = strategyReturns.length > 0 ? (strategyTotalReturn * 100).toFixed(2) + '%' : '-';
+
         tableRows += `<tr>
           <td>${year}</td>
-          <td>${benchmarkReturns.length > 0 ? (benchmarkTotalReturn * 100).toFixed(2) + '%' : '-'}</td>
-          <td>${strategyReturns.length > 0 ? (strategyTotalReturn * 100).toFixed(2) + '%' : '-'}</td>
+          <td style="${benchmarkTotalReturn > strategyTotalReturn ? 'color: #4caf50; font-weight: bold;' : ''}">${benchmarkFormatted}</td>
+          <td style="${strategyTotalReturn > benchmarkTotalReturn ? 'color: #4caf50; font-weight: bold;' : ''}">${strategyFormatted}</td>
         </tr>\n`;
       } else {
         tableRows += `<tr><td>${year}</td><td>${(strategyTotalReturn * 100).toFixed(2)}%</td></tr>\n`;
