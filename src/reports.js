@@ -1012,7 +1012,14 @@ function generateUnderwaterChart(returns, dates, title = 'Underwater Chart (Draw
   if (!returnsData || returnsData.length === 0) {
     return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">
       <rect width="${width}" height="${height}" fill="#f8f9fa" stroke="#dee2e6"/>
-      <text x="${width/2}" y="${height/2}" text-anchor="middle" fill="#6c757d">No data for underwater chart</text>
+      <text x="${width/2}" y="${height/2}" text-anchor="middle" fill="#6c757d">No returns data for underwater chart</text>
+    </svg>`;
+  }
+  
+  if (!datesData || datesData.length !== returnsData.length) {
+    return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">
+      <rect width="${width}" height="${height}" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="${width/2}" y="${height/2}" text-anchor="middle" fill="#6c757d">Underwater chart requires valid dates</text>
     </svg>`;
   }
   
@@ -1083,16 +1090,13 @@ function generateUnderwaterChart(returns, dates, title = 'Underwater Chart (Draw
   const xTicks = [];
   const dateTickCount = 6;
   for (let i = 0; i < dateTickCount; i++) {
-    const dataIndex = Math.floor((i / (dateTickCount - 1)) * (drawdowns.length - 1));
-    const xPos = margin.left + (dataIndex / (drawdowns.length - 1)) * chartWidth;
+    const dataIndex = Math.floor((i / (dateTickCount - 1)) * (datesData.length - 1));
+    const xPos = margin.left + (dataIndex / (datesData.length - 1)) * chartWidth;
     
-    let label;
-    if (datesData && datesData[dataIndex]) {
-      const date = new Date(datesData[dataIndex]);
-      label = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-    } else {
-      label = `T${dataIndex}`;
-    }
+    // Since we now require valid dates, we should always have them
+    const date = new Date(datesData[dataIndex]);
+    const label = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    
     xTicks.push({ label, xPos });
   }
   
@@ -1134,15 +1138,6 @@ function generateUnderwaterChart(returns, dates, title = 'Underwater Chart (Draw
     <!-- Axis labels -->
     <text x="${width/2}" y="${height - 5}" text-anchor="middle" font-size="11" fill="#666">Time</text>
     <text x="20" y="${height/2}" text-anchor="middle" font-size="11" fill="#666" transform="rotate(-90 20 ${height/2})">Drawdown %</text>
-    
-    <!-- Legend -->
-    <g transform="translate(${width - 150}, 60)">
-      <rect x="0" y="0" width="120" height="50" fill="white" stroke="#dee2e6" stroke-width="1" rx="5"/>
-      <line x1="10" y1="15" x2="30" y2="15" stroke="#333" stroke-width="2" stroke-dasharray="5,5"/>
-      <text x="35" y="18" font-size="10" fill="#333">Peak (0%)</text>
-      <line x1="10" y1="35" x2="30" y2="35" stroke="#1e90ff" stroke-width="2"/>
-      <text x="35" y="38" font-size="10" fill="#333">Underwater</text>
-    </g>
   </svg>`;
 }
 
