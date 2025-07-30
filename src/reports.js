@@ -996,6 +996,157 @@ function generateDrawdownPeriodsChart(returns, dates, title = 'Top 5 Drawdown Pe
 }
 
 /**
+ * Generate Underwater (Drawdown) chart
+ */
+function generateUnderwaterChart(returns, dates, title = 'Underwater Chart (Drawdowns)') {
+  const width = 800;
+  const height = 400;
+  const margin = { top: 50, right: 80, bottom: 70, left: 80 };
+  const chartWidth = width - margin.left - margin.right;
+  const chartHeight = height - margin.top - margin.bottom;
+  
+  // Properly handle returns data format
+  const returnsData = returns.values ? returns.values : (Array.isArray(returns) ? returns : []);
+  const datesData = dates || (returns.index ? returns.index : null);
+  
+  if (!returnsData || returnsData.length === 0) {
+    return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">
+      <rect width="${width}" height="${height}" fill="#f8f9fa" stroke="#dee2e6"/>
+      <text x="${width/2}" y="${height/2}" text-anchor="middle" fill="#6c757d">No data for underwater chart</text>
+    </svg>`;
+  }
+  
+  // Calculate cumulative returns and drawdowns
+  let cumulativeValue = 1.0;
+  let peak = 1.0;
+  const drawdowns = [0]; // Start at 0% drawdown
+  
+  for (let i = 0; i < returnsData.length; i++) {
+    cumulativeValue *= (1 + returnsData[i]);
+    
+    // Update peak if we've reached a new high
+    if (cumulativeValue > peak) {
+      peak = cumulativeValue;
+    }
+    
+    // Calculate drawdown as percentage from peak
+    const drawdown = ((cumulativeValue - peak) / peak) * 100; // Negative percentage
+    drawdowns.push(drawdown);
+  }
+  
+  // Prepare data points for plotting
+  const dataPoints = [];
+  for (let i = 0; i < drawdowns.length; i++) {
+    const x = margin.left + (i / (drawdowns.length - 1)) * chartWidth;
+    const yPos = margin.top + chartHeight - ((drawdowns[i] - Math.min(...drawdowns)) / (0 - Math.min(...drawdowns))) * chartHeight;
+    dataPoints.push({ x, y: yPos, value: drawdowns[i] });
+  }
+  
+  // Create the line path
+  const linePath = dataPoints.map((point, index) => {
+    return index === 0 ? `M ${point.x} ${point.y}` : `L ${point.x} ${point.y}`;
+  }).join(' ');
+  
+  // Calculate the zero line position (0% drawdown)
+  const zeroLineY = margin.top;
+  
+  // Create filled area path for underwater (from zero line down to drawdown line) - this should be blue
+  // Only fill the area between the zero line and the drawdown line when underwater
+  const underwaterAreaPoints = dataPoints.map(point => ({ x: point.x, y: Math.max(point.y, zeroLineY) }));
+  const underwaterLinePath = underwaterAreaPoints.map((point, index) => {
+    return index === 0 ? `M ${point.x} ${zeroLineY}` : `L ${point.x} ${zeroLineY}`;
+  }).join(' ') + ' ' + underwaterAreaPoints.map((point, index) => {
+    return index === 0 ? `M ${point.x} ${point.y}` : `L ${point.x} ${point.y}`;
+  }).reverse().join(' ') + ' Z';
+  
+  // Simpler approach: create area from zero line to drawdown line
+  const underwaterAreaPath = `M ${margin.left} ${zeroLineY} ` + 
+    dataPoints.map(point => `L ${point.x} ${zeroLineY}`).join(' ') + 
+    ` L ${dataPoints[dataPoints.length - 1].x} ${dataPoints[dataPoints.length - 1].y} ` +
+    dataPoints.slice().reverse().map(point => `L ${point.x} ${point.y}`).join(' ') + 
+    ` L ${margin.left} ${dataPoints[0].y} Z`;
+  
+  // Calculate axis values
+  const minDrawdown = Math.min(...drawdowns);
+  const maxDrawdown = 0; // Always 0 at the top
+  
+  // Generate Y-axis ticks
+  const yTicks = [];
+  const tickCount = 5;
+  for (let i = 0; i <= tickCount; i++) {
+    const value = maxDrawdown + (minDrawdown - maxDrawdown) * (i / tickCount);
+    const yPos = margin.top + (i / tickCount) * chartHeight;
+    yTicks.push({ value, yPos });
+  }
+  
+  // Generate X-axis date labels
+  const xTicks = [];
+  const dateTickCount = 6;
+  for (let i = 0; i < dateTickCount; i++) {
+    const dataIndex = Math.floor((i / (dateTickCount - 1)) * (drawdowns.length - 1));
+    const xPos = margin.left + (dataIndex / (drawdowns.length - 1)) * chartWidth;
+    
+    let label;
+    if (datesData && datesData[dataIndex]) {
+      const date = new Date(datesData[dataIndex]);
+      label = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    } else {
+      label = `T${dataIndex}`;
+    }
+    xTicks.push({ label, xPos });
+  }
+  
+  return `<svg width="100%" height="400" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: auto;">
+    <!-- Background -->
+    <rect width="${width}" height="${height}" fill="#f8f9fa"/>
+    
+    <!-- Chart area background -->
+    <rect x="${margin.left}" y="${margin.top}" width="${chartWidth}" height="${chartHeight}" fill="#f8f9fa" stroke="#dee2e6"/>
+    
+    <!-- Grid lines (Y-axis) -->
+    ${yTicks.map(tick => `<line x1="${margin.left}" y1="${tick.yPos}" x2="${margin.left + chartWidth}" y2="${tick.yPos}" stroke="#e9ecef" stroke-width="1"/>`).join('')}
+    
+    <!-- Grid lines (X-axis) -->
+    ${xTicks.map(tick => `<line x1="${tick.xPos}" y1="${margin.top}" x2="${tick.xPos}" y2="${margin.top + chartHeight}" stroke="#e9ecef" stroke-width="1"/>`).join('')}
+    
+    <!-- Underwater area (filled) - Blue for drawdown areas -->
+    <path d="${underwaterAreaPath}" fill="rgba(30, 144, 255, 0.4)" stroke="none"/>
+    
+    <!-- Drawdown line -->
+    <path d="${linePath}" fill="none" stroke="#1e90ff" stroke-width="2"/>
+    
+    <!-- Zero line (baseline) -->
+    <line x1="${margin.left}" y1="${zeroLineY}" x2="${margin.left + chartWidth}" y2="${zeroLineY}" stroke="#333" stroke-width="2" stroke-dasharray="5,5"/>
+    
+    <!-- Axes -->
+    <line x1="${margin.left}" y1="${margin.top}" x2="${margin.left}" y2="${margin.top + chartHeight}" stroke="#333" stroke-width="1"/>
+    <line x1="${margin.left}" y1="${margin.top + chartHeight}" x2="${margin.left + chartWidth}" y2="${margin.top + chartHeight}" stroke="#333" stroke-width="1"/>
+    
+    <!-- Y-axis labels -->
+    ${yTicks.map(tick => `<text x="${margin.left - 10}" y="${tick.yPos + 4}" text-anchor="end" font-size="10" fill="#666">${tick.value.toFixed(1)}%</text>`).join('')}
+    
+    <!-- X-axis labels -->
+    ${xTicks.map(tick => `<text x="${tick.xPos}" y="${margin.top + chartHeight + 20}" text-anchor="middle" font-size="10" fill="#666">${tick.label}</text>`).join('')}
+    
+    <!-- Title -->
+    <text x="${width/2}" y="25" text-anchor="middle" font-size="16" font-weight="600" fill="#333">${title}</text>
+    
+    <!-- Axis labels -->
+    <text x="${width/2}" y="${height - 5}" text-anchor="middle" font-size="11" fill="#666">Time</text>
+    <text x="20" y="${height/2}" text-anchor="middle" font-size="11" fill="#666" transform="rotate(-90 20 ${height/2})">Drawdown %</text>
+    
+    <!-- Legend -->
+    <g transform="translate(${width - 150}, 60)">
+      <rect x="0" y="0" width="120" height="50" fill="white" stroke="#dee2e6" stroke-width="1" rx="5"/>
+      <line x1="10" y1="15" x2="30" y2="15" stroke="#333" stroke-width="2" stroke-dasharray="5,5"/>
+      <text x="35" y="18" font-size="10" fill="#333">Peak (0%)</text>
+      <line x1="10" y1="35" x2="30" y2="35" stroke="#1e90ff" stroke-width="2"/>
+      <text x="35" y="38" font-size="10" fill="#333">Underwater</text>
+    </g>
+  </svg>`;
+}
+
+/**
  * Generate Log Returns chart (cumulative returns with logarithmic scale)
  */
 function generateLogReturnsChart(returns, dates, title = 'Log Returns') {
@@ -1919,6 +2070,9 @@ export function basic(returns, title = 'Portfolio Performance Report', rfRate = 
         </div>
         <div id="dd_periods">
           ${generateDrawdownPeriodsChart(normalizedReturns, normalizedReturns.index || null)}
+        </div>
+        <div id="underwater">
+          ${generateUnderwaterChart(normalizedReturns, normalizedReturns.index || null)}
         </div>
         <div id="returns_dist">
           ${generateReturnsDistributionChart(normalizedReturns, normalizedReturns.index || null)}
