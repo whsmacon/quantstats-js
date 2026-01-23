@@ -210,23 +210,21 @@ export function aggregateReturns(returns, period = null, compounded = true) {
   const values = returns.values;
   const dates = returns.index;
   
+  let grouped;
   if (period === 'M' || period.toLowerCase().includes('month')) {
-    return groupReturnsByPeriod(values, dates, 'month', compounded);
+    grouped = groupReturnsByPeriod(values, dates, 'month', compounded);
+  } else if (period === 'A' || period.toLowerCase().includes('year') || period.toLowerCase().includes('eoy') || period.toLowerCase().includes('yoy')) {
+    grouped = groupReturnsByPeriod(values, dates, 'year', compounded);
+  } else if (period === 'Q' || period.toLowerCase().includes('quarter')) {
+    grouped = groupReturnsByPeriod(values, dates, 'quarter', compounded);
+  } else if (period === 'W' || period.toLowerCase().includes('week')) {
+    grouped = groupReturnsByPeriod(values, dates, 'week', compounded);
+  } else {
+    return values;
   }
   
-  if (period === 'A' || period.toLowerCase().includes('year') || period.toLowerCase().includes('eoy') || period.toLowerCase().includes('yoy')) {
-    return groupReturnsByPeriod(values, dates, 'year', compounded);
-  }
-  
-  if (period === 'Q' || period.toLowerCase().includes('quarter')) {
-    return groupReturnsByPeriod(values, dates, 'quarter', compounded);
-  }
-  
-  if (period === 'W' || period.toLowerCase().includes('week')) {
-    return groupReturnsByPeriod(values, dates, 'week', compounded);
-  }
-  
-  return values;
+  // groupReturnsByPeriod returns an Object, convert to Array for compatibility
+  return Object.values(grouped);
 }
 
 /**

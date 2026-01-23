@@ -886,6 +886,9 @@ export function removeOutliers(returns, quantile = 0.95, nans = false) {
  */
 export function best(returns, aggregate = null, compounded = true, shouldPrepare = true) {
   const aggregated = aggregateReturns(returns, aggregate, compounded);
+  if (!Array.isArray(aggregated) || aggregated.length === 0) {
+    return NaN;
+  }
   return Math.max(...aggregated);
 }
 
@@ -900,6 +903,9 @@ export function best(returns, aggregate = null, compounded = true, shouldPrepare
  */
 export function worst(returns, aggregate = null, compounded = true, shouldPrepare = true) {
   const aggregated = aggregateReturns(returns, aggregate, compounded);
+  if (!Array.isArray(aggregated) || aggregated.length === 0) {
+    return NaN;
+  }
   return Math.min(...aggregated);
 }
 
