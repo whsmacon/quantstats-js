@@ -878,25 +878,29 @@ export function removeOutliers(returns, quantile = 0.95, nans = false) {
 /**
  * Returns the best return for a period
  * Exactly matches Python implementation
- * @param {Array} returns - Returns array
- * @param {boolean} nans - Include NaN values (default false)
+ * @param {Object|Array} returns - Returns object with {values, index} or array
+ * @param {string} aggregate - Aggregation period ('M' for month, 'A' for year, null for daily)
+ * @param {boolean} compounded - Whether to compound returns when aggregating (default true)
+ * @param {boolean} shouldPrepare - Whether to prepare returns (default true)
  * @returns {number} Best return
  */
-export function best(returns, nans = false) {
-  const cleanReturns = prepareReturns(returns, 0, nans);
-  return Math.max(...cleanReturns);
+export function best(returns, aggregate = null, compounded = true, shouldPrepare = true) {
+  const aggregated = aggregateReturns(returns, aggregate, compounded);
+  return Math.max(...aggregated);
 }
 
 /**
  * Returns the worst return for a period
  * Exactly matches Python implementation
- * @param {Array} returns - Returns array
- * @param {boolean} nans - Include NaN values (default false)
+ * @param {Object|Array} returns - Returns object with {values, index} or array
+ * @param {string} aggregate - Aggregation period ('M' for month, 'A' for year, null for daily)
+ * @param {boolean} compounded - Whether to compound returns when aggregating (default true)
+ * @param {boolean} shouldPrepare - Whether to prepare returns (default true)
  * @returns {number} Worst return
  */
-export function worst(returns, nans = false) {
-  const cleanReturns = prepareReturns(returns, 0, nans);
-  return Math.min(...cleanReturns);
+export function worst(returns, aggregate = null, compounded = true, shouldPrepare = true) {
+  const aggregated = aggregateReturns(returns, aggregate, compounded);
+  return Math.min(...aggregated);
 }
 
 /**

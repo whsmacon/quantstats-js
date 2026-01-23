@@ -2312,18 +2312,18 @@ export function calculateComprehensiveMetrics(returns, rfRate = 0, mode = 'basic
     if (mode.toLowerCase() === 'full') {
       metrics['   '] = blank; // Fourth spacer
       
-      const bestDay = stats.best(cleanReturns, null, true, false);
-      const worstDay = stats.worst(cleanReturns, null, true, false);
+      const bestDay = stats.best(returns, null, true, false);
+      const worstDay = stats.worst(returns, null, true, false);
       metrics['Best Day %'] = (bestDay * pct).toFixed(2) + '%';
       metrics['Worst Day %'] = (worstDay * pct).toFixed(2) + '%';
       
-      const bestMonth = stats.best(cleanReturns, 'M', true, false);
-      const worstMonth = stats.worst(cleanReturns, 'M', false, false);
+      const bestMonth = stats.best(returns, 'M', true, false);
+      const worstMonth = stats.worst(returns, 'M', true, false);
       metrics['Best Month %'] = (bestMonth * pct).toFixed(2) + '%';
       metrics['Worst Month %'] = (worstMonth * pct).toFixed(2) + '%';
       
-      const bestYear = stats.best(cleanReturns, 'A', true, false);
-      const worstYear = stats.worst(cleanReturns, 'A', true, false);
+      const bestYear = stats.best(returns, 'A', true, false);
+      const worstYear = stats.worst(returns, 'A', true, false);
       metrics['Best Year %'] = (bestYear * pct).toFixed(2) + '%';
       metrics['Worst Year %'] = (worstYear * pct).toFixed(2) + '%';
     }
